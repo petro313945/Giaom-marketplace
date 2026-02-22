@@ -67,3 +67,9 @@ export const updateOrderStatus = async (id: string, status: 'pending' | 'process
   const response = await api.put<{ message: string; order: Order }>(`/orders/${id}/status`, { status });
   return response.data;
 };
+
+// Get all orders (admin only)
+export const getAllOrders = async (): Promise<{ orders: Order[]; statistics: { totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number }; count: number }> => {
+  const response = await api.get<{ orders: Order[]; statistics: { totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number }; count: number }>('/orders/admin/all');
+  return response.data;
+};
