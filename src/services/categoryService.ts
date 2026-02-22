@@ -1,7 +1,8 @@
 import api from './api';
 
 export interface Category {
-  id: string;
+  _id: string;
+  id?: string; // Alias for _id
   name: string;
   slug: string;
   description?: string;

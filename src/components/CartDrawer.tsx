@@ -67,7 +67,13 @@ export default function CartDrawer() {
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => updateItem(item.id || '', item.quantity - 1)}
+                            onClick={async () => {
+                              try {
+                                await updateItem(item.id || '', item.quantity - 1)
+                              } catch (error: any) {
+                                alert(error?.message || 'Failed to update cart')
+                              }
+                            }}
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
@@ -76,7 +82,13 @@ export default function CartDrawer() {
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => updateItem(item.id || '', item.quantity + 1)}
+                            onClick={async () => {
+                              try {
+                                await updateItem(item.id || '', item.quantity + 1)
+                              } catch (error: any) {
+                                alert(error?.message || 'Failed to update cart')
+                              }
+                            }}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
@@ -84,7 +96,13 @@ export default function CartDrawer() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 ml-auto"
-                            onClick={() => removeItem(item.id || '')}
+                            onClick={async () => {
+                              try {
+                                await removeItem(item.id || '')
+                              } catch (error: any) {
+                                alert(error?.message || 'Failed to remove item')
+                              }
+                            }}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -102,7 +120,19 @@ export default function CartDrawer() {
                 <Button className="w-full" size="lg" asChild>
                   <Link to="/checkout">Proceed to Checkout</Link>
                 </Button>
-                <Button variant="outline" className="w-full" onClick={clearCart}>
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={async () => {
+                    if (confirm('Are you sure you want to clear your cart?')) {
+                      try {
+                        await clearCart()
+                      } catch (error: any) {
+                        alert(error?.message || 'Failed to clear cart')
+                      }
+                    }
+                  }}
+                >
                   Clear Cart
                 </Button>
               </div>

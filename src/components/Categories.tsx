@@ -41,20 +41,31 @@ export default function Categories() {
 
   if (loading) {
     return (
-      <section className="container mx-auto py-12 md:py-16">
+      <section className="container py-12 md:py-16">
+        <h3 className="text-2xl md:text-3xl font-bold mb-8">Shop by Category</h3>
         <div className="text-center">Loading categories...</div>
       </section>
     )
   }
 
+  if (categories.length === 0) {
+    return (
+      <section className="container py-12 md:py-16">
+        <h3 className="text-2xl md:text-3xl font-bold mb-8">Shop by Category</h3>
+        <div className="text-center text-muted-foreground">No categories available yet</div>
+      </section>
+    )
+  }
+
   return (
-    <section className="container mx-auto py-12 md:py-16">
+    <section className="container py-12 md:py-16">
       <h3 className="text-2xl md:text-3xl font-bold mb-8">Shop by Category</h3>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {categories.map((category) => {
           const Icon = iconMap[category.slug] || ShoppingBag
+          const categoryId = (category as any)._id || category.id
           return (
-            <Link key={category.id} to={`/category/${category.slug}`}>
+            <Link key={categoryId} to={`/category/${category.slug}`}>
               <Card className="hover:shadow-lg transition-shadow cursor-pointer">
                 <CardContent className="flex flex-col items-center justify-center p-6 gap-3">
                   <Icon className="h-8 w-8" />

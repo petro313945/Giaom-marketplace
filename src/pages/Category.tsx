@@ -44,9 +44,12 @@ export default function Category() {
     e.preventDefault()
     e.stopPropagation()
     try {
-      await addItem(product.id, 1)
+      const productId = product._id || product.id
+      await addItem(productId, 1)
+      // Success feedback could be added here with toast
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to add to cart')
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
+      alert(errorMessage)
     }
   }
 
@@ -73,15 +76,17 @@ export default function Category() {
         </div>
       </div>
 
-      <div className="container mx-auto py-12">
+      <div className="container py-12">
         {products.length === 0 ? (
           <div className="text-center text-muted-foreground">
             <p>No products found in this category.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((product) => (
-              <Link key={product.id} to={`/product/${product.id}`}>
+            {products.map((product) => {
+              const productId = product._id || product.id
+              return (
+              <Link key={productId} to={`/product/${productId}`}>
                 <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
                   <CardContent className="p-0">
                     <img
@@ -106,7 +111,8 @@ export default function Category() {
                   </CardFooter>
                 </Card>
               </Link>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

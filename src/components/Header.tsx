@@ -1,16 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Search, User, Menu } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { useAuth } from '../context/AuthContext'
 import CartDrawer from './CartDrawer'
+import * as categoryService from '../services/categoryService'
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [categories, setCategories] = useState<categoryService.Category[]>([])
   const { isAuthenticated, user, logout } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await categoryService.getCategories()
+        // Get first 4 categories for mobile menu
+        setCategories(response.categories.slice(0, 4))
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
+      }
+    }
+    fetchCategories()
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -100,18 +115,15 @@ export default function Header() {
       {isMenuOpen && (
         <div className="border-t md:hidden">
           <nav className="container py-4 flex flex-col gap-2">
-            <Button variant="ghost" className="justify-start" asChild>
-              <Link to="/category/electronics">Electronics</Link>
-            </Button>
-            <Button variant="ghost" className="justify-start" asChild>
-              <Link to="/category/clothing">Clothing</Link>
-            </Button>
-            <Button variant="ghost" className="justify-start" asChild>
-              <Link to="/category/home">Home & Living</Link>
-            </Button>
-            <Button variant="ghost" className="justify-start" asChild>
-              <Link to="/category/sports">Sports</Link>
-            </Button>
+            {categories.length > 0 ? (
+              categories.map((category) => (
+                <Button key={category._id || category.id} variant="ghost" className="justify-start" asChild>
+                  <Link to={`/category/${category.slug}`}>{category.name}</Link>
+                </Button>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground px-4">Loading categories...</div>
+            )}
           </nav>
         </div>
       )}

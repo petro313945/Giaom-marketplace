@@ -1,8 +1,10 @@
 import api from './api';
 
 export interface User {
-  id: string;
+  _id: string;
+  id?: string; // Alias for _id
   email: string;
+  name?: string;
   fullName?: string;
   role: 'customer' | 'seller' | 'admin';
   createdAt?: string;
@@ -26,9 +28,9 @@ export const updateCurrentUserProfile = async (data: UpdateProfileData): Promise
 };
 
 // Get all users (admin only)
-export const getAllUsers = async (): Promise<{ users: User[]; count: number }> => {
+export const getAllUsers = async (): Promise<User[]> => {
   const response = await api.get<{ users: User[]; count: number }>('/users');
-  return response.data;
+  return response.data.users;
 };
 
 // Get user by ID (admin only)

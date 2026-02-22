@@ -1,14 +1,22 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import CustomerProfile from './profile/CustomerProfile'
+import SellerProfile from './profile/SellerProfile'
+import AdminProfile from './profile/AdminProfile'
 
 export default function Profile() {
-  return (
-    <div>
-      <h1>Profile Page</h1>
-      <Routes>
-        <Route path="/" element={<div>Customer Profile</div>} />
-        <Route path="/seller" element={<div>Seller Profile</div>} />
-        <Route path="/admin" element={<div>Admin Profile</div>} />
-      </Routes>
-    </div>
-  )
+  const { user } = useAuth()
+
+  if (!user) {
+    return <Navigate to="/auth/login" replace />
+  }
+
+  // Route based on user role
+  if (user.role === 'admin') {
+    return <AdminProfile />
+  } else if (user.role === 'seller') {
+    return <SellerProfile />
+  } else {
+    return <CustomerProfile />
+  }
 }

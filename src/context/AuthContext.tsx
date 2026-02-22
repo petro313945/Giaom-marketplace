@@ -47,6 +47,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', response.accessToken);
     localStorage.setItem('refreshToken', response.refreshToken);
     setUser(response.user);
+    // Dispatch custom event to notify CartContext
+    window.dispatchEvent(new Event('authStateChanged'));
     return response;
   };
 
@@ -55,12 +57,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', response.accessToken);
     localStorage.setItem('refreshToken', response.refreshToken);
     setUser(response.user);
+    // Dispatch custom event to notify CartContext
+    window.dispatchEvent(new Event('authStateChanged'));
     return response;
   };
 
   const handleLogout = () => {
     authService.logout();
     setUser(null);
+    // Dispatch custom event to notify CartContext
+    window.dispatchEvent(new Event('authStateChanged'));
   };
 
   const value: AuthContextType = {

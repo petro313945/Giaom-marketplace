@@ -23,7 +23,8 @@ export interface ShippingAddress {
 }
 
 export interface Order {
-  id: string;
+  _id: string;
+  id?: string; // Alias for _id
   userId: string;
   items: OrderItem[];
   totalAmount: number;
@@ -44,9 +45,9 @@ export const createOrder = async (data: CreateOrderData): Promise<{ message: str
 };
 
 // Get user's orders
-export const getUserOrders = async (): Promise<{ orders: Order[]; count: number }> => {
+export const getUserOrders = async (): Promise<Order[]> => {
   const response = await api.get<{ orders: Order[]; count: number }>('/orders');
-  return response.data;
+  return response.data.orders;
 };
 
 // Get order details
@@ -56,9 +57,9 @@ export const getOrderById = async (id: string): Promise<{ order: Order }> => {
 };
 
 // Get seller's orders
-export const getSellerOrders = async (): Promise<{ orders: Order[]; count: number }> => {
+export const getSellerOrders = async (): Promise<Order[]> => {
   const response = await api.get<{ orders: Order[]; count: number }>('/orders/seller/my-orders');
-  return response.data;
+  return response.data.orders;
 };
 
 // Update order status

@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 export default function Hero() {
   return (
     <section className="relative bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950">
-      <div className="container mx-auto py-24 md:py-32">
+      <div className="container py-24 md:py-32">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl md:text-6xl font-bold mb-6 text-balance">
             Discover Unique Products from Independent Sellers

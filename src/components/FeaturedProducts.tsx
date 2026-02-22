@@ -31,15 +31,18 @@ export default function FeaturedProducts() {
     e.preventDefault()
     e.stopPropagation()
     try {
-      await addItem(product.id, 1)
+      const productId = product._id || product.id
+      await addItem(productId, 1)
+      // Success feedback could be added here with toast
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to add to cart')
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
+      alert(errorMessage)
     }
   }
 
   if (loading) {
     return (
-      <section className="container mx-auto py-12 md:py-16 bg-muted/30">
+      <section className="container py-12 md:py-16 bg-muted/30">
         <div className="text-center">Loading products...</div>
       </section>
     )
@@ -47,7 +50,7 @@ export default function FeaturedProducts() {
 
   if (products.length === 0) {
     return (
-      <section className="container mx-auto py-12 md:py-16 bg-muted/30">
+      <section className="container py-12 md:py-16 bg-muted/30">
         <h3 className="text-2xl md:text-3xl font-bold mb-8">Featured Products</h3>
         <div className="text-center text-muted-foreground">No products available yet</div>
       </section>
@@ -55,11 +58,13 @@ export default function FeaturedProducts() {
   }
 
   return (
-    <section className="container mx-auto py-12 md:py-16 bg-muted/30">
+    <section className="container py-12 md:py-16 bg-muted/30">
       <h3 className="text-2xl md:text-3xl font-bold mb-8">Featured Products</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {products.map((product) => (
-          <Link key={product.id} to={`/product/${product.id}`}>
+        {products.map((product) => {
+          const productId = product._id || product.id
+          return (
+          <Link key={productId} to={`/product/${productId}`}>
             <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
               <CardContent className="p-0">
                 <img
@@ -84,7 +89,8 @@ export default function FeaturedProducts() {
               </CardFooter>
             </Card>
           </Link>
-        ))}
+          )
+        })}
       </div>
     </section>
   )

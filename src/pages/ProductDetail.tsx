@@ -38,17 +38,20 @@ export default function ProductDetail() {
     if (!product) return
     
     try {
-      await addItem(product.id, 1)
+      const productId = product._id || product.id
+      await addItem(productId, 1)
       setAdded(true)
       setTimeout(() => setAdded(false), 2000)
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to add to cart')
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
+      setError(errorMessage)
+      setTimeout(() => setError(null), 3000)
     }
   }
 
   if (loading) {
     return (
-      <div className="container mx-auto py-12">
+      <div className="container py-12">
         <div className="text-center">Loading product...</div>
       </div>
     )
@@ -56,7 +59,7 @@ export default function ProductDetail() {
 
   if (error || !product) {
     return (
-      <div className="container mx-auto py-12">
+      <div className="container py-12">
         <div className="text-center">
           <p className="text-destructive mb-4">{error || 'Product not found'}</p>
           <Button onClick={() => navigate('/')} variant="outline">
@@ -69,7 +72,7 @@ export default function ProductDetail() {
   }
 
   return (
-    <div className="container mx-auto py-12">
+    <div className="container py-12">
       <Button 
         variant="ghost" 
         onClick={() => navigate(-1)}

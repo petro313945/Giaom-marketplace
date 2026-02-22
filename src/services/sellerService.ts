@@ -1,7 +1,8 @@
 import api from './api';
 
 export interface SellerProfile {
-  id: string;
+  _id: string;
+  id?: string; // Alias for _id
   userId: string | User;
   businessName: string;
   businessDescription?: string;
@@ -39,6 +40,12 @@ export const getCurrentSellerProfile = async (): Promise<{ sellerProfile: Seller
   return response.data;
 };
 
+// Get seller profile (alias for getCurrentSellerProfile)
+export const getSellerProfile = async (): Promise<SellerProfile> => {
+  const response = await getCurrentSellerProfile();
+  return response.sellerProfile;
+};
+
 // Update seller profile
 export const updateSellerProfile = async (data: UpdateSellerData): Promise<{ message: string; sellerProfile: SellerProfile }> => {
   const response = await api.put<{ message: string; sellerProfile: SellerProfile }>('/sellers/profile', data);
@@ -52,9 +59,9 @@ export const getPendingSellers = async (): Promise<{ sellers: SellerProfile[]; c
 };
 
 // Get all sellers (admin only)
-export const getAllSellers = async (): Promise<{ sellers: SellerProfile[]; count: number }> => {
+export const getAllSellers = async (): Promise<SellerProfile[]> => {
   const response = await api.get<{ sellers: SellerProfile[]; count: number }>('/sellers');
-  return response.data;
+  return response.data.sellers;
 };
 
 // Approve seller (admin only)
