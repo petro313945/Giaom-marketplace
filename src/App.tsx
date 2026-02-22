@@ -1,5 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import { CartProvider } from './context/CartContext'
 import { Toaster } from '@/components/ui/toaster'
+import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import ProductDetail from './pages/ProductDetail'
 import Category from './pages/Category'
@@ -12,21 +15,46 @@ import Layout from './components/Layout'
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/category/:slug" element={<Category />} />
-          <Route path="/auth/login" element={<Login />} />
-          <Route path="/auth/sign-up" element={<Signup />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/become-seller" element={<BecomeSeller />} />
-          <Route path="/profile/*" element={<Profile />} />
-        </Routes>
-        <Toaster />
-      </Layout>
-    </Router>
+    <AuthProvider>
+      <CartProvider>
+        <Router>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/product/:id" element={<ProductDetail />} />
+              <Route path="/category/:slug" element={<Category />} />
+              <Route path="/auth/login" element={<Login />} />
+              <Route path="/auth/sign-up" element={<Signup />} />
+              <Route 
+                path="/checkout" 
+                element={
+                  <ProtectedRoute>
+                    <Checkout />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/become-seller" 
+                element={
+                  <ProtectedRoute>
+                    <BecomeSeller />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/profile/*" 
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                } 
+              />
+            </Routes>
+            <Toaster />
+          </Layout>
+        </Router>
+      </CartProvider>
+    </AuthProvider>
   )
 }
 

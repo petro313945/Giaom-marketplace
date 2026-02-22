@@ -1,8 +1,13 @@
+import Hero from '../components/Hero'
+import Categories from '../components/Categories'
+import FeaturedProducts from '../components/FeaturedProducts'
+
 export default function Home() {
   return (
-    <div>
-      <h1>Home Page</h1>
-      <p>This will be the homepage with hero, categories, and featured products</p>
-    </div>
+    <>
+      <Hero />
+      <Categories />
+      <FeaturedProducts />
+    </>
   )
 }
