@@ -3,6 +3,7 @@ import { Button } from './ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet'
 import { ShoppingCart, Minus, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { getImageUrl } from '../utils/imageUtils'
 
 export default function CartDrawer() {
   const { cart, removeItem, updateItem, clearCart, itemCount, loading } = useCart()
@@ -49,7 +50,7 @@ export default function CartDrawer() {
                   const productData = typeof product === 'object' ? product : null
                   const productName = productData?.title || 'Product'
                   const productPrice = productData?.price || 0
-                  const productImage = productData?.imageUrl || '/placeholder.svg'
+                  const productImage = getImageUrl(productData?.imageUrl)
                   const productId = productData?.id || item.productId
 
                   return (

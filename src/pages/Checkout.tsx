@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCart } from '../context/CartContext'
+import { getImageUrl } from '../utils/imageUtils'
 import * as orderService from '../services/orderService'
 import type { ShippingAddress } from '../services/orderService'
 
@@ -188,7 +189,7 @@ export default function Checkout() {
                   const productData = typeof product === 'object' ? product : null
                   const productName = productData?.title || 'Product'
                   const productPrice = productData?.price || 0
-                  const productImage = productData?.imageUrl || '/placeholder.svg'
+                  const productImage = getImageUrl(productData?.imageUrl)
 
                   return (
                     <div key={item.id} className="flex gap-3">

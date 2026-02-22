@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Star, ShoppingCart, ArrowLeft } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import * as productService from '../services/productService'
+import { getImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
 
 export default function ProductDetail() {
@@ -85,7 +86,7 @@ export default function ProductDetail() {
       <div className="grid md:grid-cols-2 gap-8">
         <div>
           <img
-            src={product.imageUrl || "/placeholder.svg"}
+            src={getImageUrl(product.imageUrl)}
             alt={product.title}
             className="w-full rounded-lg"
           />

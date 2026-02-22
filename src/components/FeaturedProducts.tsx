@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import { Star } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import * as productService from '../services/productService'
+import { getImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
 
 export default function FeaturedProducts() {
@@ -68,7 +69,7 @@ export default function FeaturedProducts() {
             <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
               <CardContent className="p-0">
                 <img
-                  src={product.imageUrl || "/placeholder.svg"}
+                  src={getImageUrl(product.imageUrl)}
                   alt={product.title}
                   className="w-full h-64 object-cover rounded-t-lg"
                 />

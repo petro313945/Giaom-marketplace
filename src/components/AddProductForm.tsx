@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -6,9 +6,11 @@ import { Textarea } from './ui/textarea'
 import { Label } from './ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import { Plus } from 'lucide-react'
+import { Plus, Upload, X } from 'lucide-react'
 import * as productService from '../services/productService'
 import * as categoryService from '../services/categoryService'
+import * as uploadService from '../services/uploadService'
+import { getImageUrl } from '../utils/imageUtils'
 import type { Category } from '../services/categoryService'
 
 interface AddProductFormData {
@@ -26,8 +28,13 @@ interface AddProductFormProps {
 export default function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<AddProductFormData>()
 
   const selectedCategory = watch('category')
@@ -44,20 +51,80 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     fetchCategories()
   }, [])
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file')
+        return
+      }
+      // Validate file size (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size must be less than 5MB')
+        return
+      }
+      setSelectedImage(file)
+      setError(null)
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleImageUpload = async () => {
+    if (!selectedImage) return
+
+    try {
+      setIsUploading(true)
+      setError(null)
+      const response = await uploadService.uploadImage(selectedImage)
+      setUploadedImageUrl(response.imageUrl)
+      setValue('imageUrl', response.imageUrl)
+    } catch (error: any) {
+      setError(error?.message || error?.response?.data?.error || 'Failed to upload image')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    setUploadedImageUrl(null)
+    setValue('imageUrl', '')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const onSubmit = async (data: AddProductFormData) => {
     try {
       setIsLoading(true)
       setError(null)
+
+      // If image is selected but not uploaded, upload it first
+      let imageUrl = data.imageUrl
+      if (selectedImage && !uploadedImageUrl) {
+        const uploadResponse = await uploadService.uploadImage(selectedImage)
+        imageUrl = uploadResponse.imageUrl
+      }
 
       await productService.createProduct({
         title: data.title,
         description: data.description,
         price: parseFloat(data.price),
         category: data.category,
-        imageUrl: data.imageUrl || '/placeholder.svg',
+        imageUrl: imageUrl || '/placeholder.svg',
       })
 
       reset()
+      setSelectedImage(null)
+      setImagePreview(null)
+      setUploadedImageUrl(null)
       setIsOpen(false)
       if (onProductAdded) {
         onProductAdded()
@@ -148,12 +215,57 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">Image URL (optional)</Label>
+            <Label htmlFor="image">Product Image</Label>
+            <div className="space-y-2">
+              <Input
+                id="image"
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={handleImageSelect}
+                className="cursor-pointer"
+              />
+              {selectedImage && !uploadedImageUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleImageUpload}
+                  disabled={isUploading}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Uploading...' : 'Upload Image'}
+                </Button>
+              )}
+              {(imagePreview || uploadedImageUrl) && (
+                <div className="relative">
+                  <img
+                    src={uploadedImageUrl ? getImageUrl(uploadedImageUrl) : imagePreview || ''}
+                    alt="Preview"
+                    className="w-full h-48 object-cover rounded-lg border"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2"
+                    onClick={removeImage}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Or enter image URL manually:
+            </p>
             <Input
               id="imageUrl"
               type="url"
               placeholder="https://..."
               {...register('imageUrl')}
+              disabled={!!uploadedImageUrl}
             />
           </div>
           {error && (
@@ -169,6 +281,12 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
               setIsOpen(false)
               reset()
               setError(null)
+              setSelectedImage(null)
+              setImagePreview(null)
+              setUploadedImageUrl(null)
+              if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+              }
             }}>
               Cancel
             </Button>
