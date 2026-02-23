@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Toaster } from '@/components/ui/toaster'
 import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
@@ -17,11 +18,12 @@ import Layout from './components/Layout'
 
 function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <Router>
-          <Layout>
-            <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <CartProvider>
+          <Router>
+            <Layout>
+              <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/category/:slug" element={<Category />} />
@@ -60,12 +62,13 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
-            </Routes>
-            <Toaster />
-          </Layout>
-        </Router>
-      </CartProvider>
-    </AuthProvider>
+              </Routes>
+              <Toaster />
+            </Layout>
+          </Router>
+        </CartProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

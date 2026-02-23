@@ -7,11 +7,6 @@ export interface OrderItem {
   title: string;
 }
 
-export interface Product {
-  id: string;
-  title: string;
-}
-
 export interface ShippingAddress {
   fullName: string;
   address: string;
@@ -23,8 +18,7 @@ export interface ShippingAddress {
 }
 
 export interface Order {
-  _id: string;
-  id?: string; // Alias for _id
+  id: string;
   userId: string;
   items: OrderItem[];
   totalAmount: number;
@@ -34,42 +28,46 @@ export interface Order {
   updatedAt: string;
 }
 
-export interface CreateOrderData {
-  shippingAddress: ShippingAddress;
+export interface Product {
+  id: string;
+  title: string;
+  price: number;
 }
 
-// Create order from cart
-export const createOrder = async (data: CreateOrderData): Promise<{ message: string; order: Order }> => {
-  const response = await api.post<{ message: string; order: Order }>('/orders', data);
+// Create order
+export const createOrder = async (shippingAddress: ShippingAddress): Promise<{ message: string; order: Order }> => {
+  const response = await api.post<{ message: string; order: Order }>('/orders', {
+    shippingAddress,
+  });
   return response.data;
 };
 
-// Get user's orders
-export const getUserOrders = async (): Promise<Order[]> => {
+// Get user orders
+export const getUserOrders = async (): Promise<{ orders: Order[]; count: number }> => {
   const response = await api.get<{ orders: Order[]; count: number }>('/orders');
-  return response.data.orders;
+  return response.data;
 };
 
-// Get order details
+// Get order by ID
 export const getOrderById = async (id: string): Promise<{ order: Order }> => {
   const response = await api.get<{ order: Order }>(`/orders/${id}`);
   return response.data;
 };
 
-// Get seller's orders
-export const getSellerOrders = async (): Promise<Order[]> => {
-  const response = await api.get<{ orders: Order[]; count: number }>('/orders/seller/my-orders');
-  return response.data.orders;
-};
-
-// Update order status
-export const updateOrderStatus = async (id: string, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'): Promise<{ message: string; order: Order }> => {
-  const response = await api.put<{ message: string; order: Order }>(`/orders/${id}/status`, { status });
+// Get seller orders
+export const getSellerOrders = async (): Promise<{ orders: Order[] }> => {
+  const response = await api.get<{ orders: Order[] }>('/orders/seller/my-orders');
   return response.data;
 };
 
 // Get all orders (admin only)
-export const getAllOrders = async (): Promise<{ orders: Order[]; statistics: { totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number }; count: number }> => {
-  const response = await api.get<{ orders: Order[]; statistics: { totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number }; count: number }>('/orders/admin/all');
+export const getAllOrders = async (): Promise<{ orders: Order[]; statistics: { totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number } }> => {
+  const response = await api.get<{ orders: Order[]; statistics: { totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number } }>('/orders/admin/all');
+  return response.data;
+};
+
+// Update order status (seller/admin)
+export const updateOrderStatus = async (orderId: string, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'): Promise<{ message: string; order: Order }> => {
+  const response = await api.put<{ message: string; order: Order }>(`/orders/${orderId}/status`, { status });
   return response.data;
 };

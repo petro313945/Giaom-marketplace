@@ -73,27 +73,11 @@ export default function Header() {
           )}
           {isAuthenticated && (
             <>
-              {user?.role === 'customer' && (
-                <Button variant="ghost" size="icon" asChild>
-                  <Link to="/profile">
-                    <User className="h-5 w-5" />
-                  </Link>
-                </Button>
-              )}
-              {user?.role === 'seller' && (
-                <Button variant="ghost" size="icon" asChild>
-                  <Link to="/profile/seller">
-                    <User className="h-5 w-5" />
-                  </Link>
-                </Button>
-              )}
-              {user?.role === 'admin' && (
-                <Button variant="ghost" size="icon" asChild>
-                  <Link to="/profile/admin">
-                    <User className="h-5 w-5" />
-                  </Link>
-                </Button>
-              )}
+              <Button variant="ghost" size="icon" asChild>
+                <Link to="/profile">
+                  <User className="h-5 w-5" />
+                </Link>
+              </Button>
             </>
           )}
           <CartDrawer />

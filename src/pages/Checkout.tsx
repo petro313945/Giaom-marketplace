@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCart } from '../context/CartContext'
-import { getImageUrl } from '../utils/imageUtils'
 import * as orderService from '../services/orderService'
 import type { ShippingAddress } from '../services/orderService'
 
@@ -14,58 +13,18 @@ interface CheckoutFormData {
   fullName: string
   address: string
   city: string
-  state?: string
+  state: string
   zipCode: string
   country: string
-  phone?: string
+  phone: string
 }
 
 export default function Checkout() {
+  const { cart, loading: cartLoading, clearCart } = useCart()
   const navigate = useNavigate()
-  const { cart, clearCart, loading: cartLoading } = useCart()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { register, handleSubmit, formState: { errors } } = useForm<CheckoutFormData>()
-
-  const calculateTotal = () => {
-    if (!cart || !cart.items) return 0
-    return cart.items.reduce((sum, item) => {
-      const product = item.productId as any
-      const price = typeof product === 'object' && product?.price ? product.price : 0
-      return sum + price * item.quantity
-    }, 0)
-  }
-
-  const onSubmit = async (data: CheckoutFormData) => {
-    if (!cart || cart.items.length === 0) {
-      setError('Cart is empty')
-      return
-    }
-
-    try {
-      setIsSubmitting(true)
-      setError(null)
-
-      const shippingAddress: ShippingAddress = {
-        fullName: data.fullName,
-        address: data.address,
-        city: data.city,
-        state: data.state,
-        zipCode: data.zipCode,
-        country: data.country,
-        phone: data.phone,
-      }
-
-      await orderService.createOrder({ shippingAddress })
-      await clearCart()
-      navigate('/')
-      alert('Order placed successfully!')
-    } catch (error: any) {
-      setError(error.response?.data?.error || 'Failed to place order')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   if (cartLoading) {
     return (
@@ -77,7 +36,7 @@ export default function Checkout() {
 
   if (!cart || cart.items.length === 0) {
     return (
-      <div className="container py-12 flex items-center justify-center">
+      <div className="container py-12 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <h1 className="text-3xl font-bold mb-4">Your cart is empty</h1>
           <p className="text-muted-foreground mb-8">Add some items to your cart to checkout</p>
@@ -87,13 +46,55 @@ export default function Checkout() {
     )
   }
 
+  const calculateTotal = () => {
+    if (!cart.items.length) return 0
+    return cart.items.reduce((sum, item) => {
+      const product = item.productId as any
+      const price = typeof product === 'object' ? product.price : 0
+      return sum + (price * item.quantity)
+    }, 0)
+  }
+
   const subtotal = calculateTotal()
   const tax = subtotal * 0.08
   const total = subtotal + tax
 
+  const onSubmit = async (data: CheckoutFormData) => {
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      const shippingAddress: ShippingAddress = {
+        fullName: data.fullName,
+        address: data.address,
+        city: data.city,
+        state: data.state || '',
+        zipCode: data.zipCode,
+        country: data.country,
+        phone: data.phone || '',
+      }
+
+      await orderService.createOrder(shippingAddress)
+      await clearCart()
+      navigate('/')
+      alert('Order placed successfully!')
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to place order')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="container py-12">
       <h1 className="text-3xl font-bold mb-8">Checkout</h1>
+      
+      {error && (
+        <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md mb-6">
+          {error}
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -112,6 +113,7 @@ export default function Checkout() {
                     <p className="text-sm text-destructive">{errors.fullName.message}</p>
                   )}
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="address">Address</Label>
                   <Input
@@ -122,7 +124,8 @@ export default function Checkout() {
                     <p className="text-sm text-destructive">{errors.address.message}</p>
                   )}
                 </div>
-                <div className="grid sm:grid-cols-3 gap-4">
+
+                <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="city">City</Label>
                     <Input
@@ -133,10 +136,14 @@ export default function Checkout() {
                       <p className="text-sm text-destructive">{errors.city.message}</p>
                     )}
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
+                    <Label htmlFor="state">State/Province</Label>
                     <Input id="state" {...register('state')} />
                   </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="zipCode">ZIP Code</Label>
                     <Input
@@ -147,29 +154,25 @@ export default function Checkout() {
                       <p className="text-sm text-destructive">{errors.zipCode.message}</p>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="country">Country</Label>
+                    <Input
+                      id="country"
+                      {...register('country', { required: 'Country is required' })}
+                    />
+                    {errors.country && (
+                      <p className="text-sm text-destructive">{errors.country.message}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country">Country</Label>
-                  <Input
-                    id="country"
-                    {...register('country', { required: 'Country is required' })}
-                  />
-                  {errors.country && (
-                    <p className="text-sm text-destructive">{errors.country.message}</p>
-                  )}
-                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone (Optional)</Label>
-                  <Input id="phone" {...register('phone')} />
+                  <Input id="phone" type="tel" {...register('phone')} />
                 </div>
               </CardContent>
             </Card>
-
-            {error && (
-              <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md">
-                {error}
-              </div>
-            )}
 
             <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? 'Placing Order...' : `Place Order - $${total.toFixed(2)}`}
@@ -186,15 +189,14 @@ export default function Checkout() {
               <div className="space-y-3">
                 {cart.items.map((item) => {
                   const product = item.productId as any
-                  const productData = typeof product === 'object' ? product : null
-                  const productName = productData?.title || 'Product'
-                  const productPrice = productData?.price || 0
-                  const productImage = getImageUrl(productData?.imageUrl)
-
+                  const productName = typeof product === 'object' ? product.title : 'Product'
+                  const productPrice = typeof product === 'object' ? product.price : 0
+                  const productImage = typeof product === 'object' ? product.imageUrl : '/placeholder.svg'
+                  
                   return (
                     <div key={item.id} className="flex gap-3">
                       <img
-                        src={productImage}
+                        src={productImage || '/placeholder.svg'}
                         alt={productName}
                         className="h-16 w-16 rounded object-cover"
                       />
