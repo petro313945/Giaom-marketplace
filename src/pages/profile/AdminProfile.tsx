@@ -422,112 +422,138 @@ export default function AdminProfile() {
               ) : allProducts.length === 0 ? (
                 <p className="text-muted-foreground">No products yet</p>
               ) : (
-                <div className="space-y-4">
-                  {allProducts.map((product) => {
-                    const productId = product._id || product.id
-                    const seller = product.sellerId as any
-                    const sellerName = typeof seller === 'object' ? (seller?.fullName || seller?.email || 'N/A') : 'N/A'
-                    
-                    return (
-                      <div key={productId} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50">
-                        <img
-                          src={getFirstImageUrl(product)}
-                          alt={product.title}
-                          className="h-16 w-16 rounded-lg object-cover"
-                        />
-                        <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <p className="font-medium line-clamp-2" title={product.title}>{product.title}</p>
-                            <Badge variant={
-                              product.status === 'approved' ? 'default' :
-                              product.status === 'rejected' ? 'destructive' :
-                              'secondary'
-                            } className="capitalize">
-                              {product.status}
-                            </Badge>
-                          </div>
-                          {product.description && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 text-sm">
-                            <p className="font-medium text-primary">${product.price.toFixed(2)}</p>
-                            <p className="text-muted-foreground">Category: {product.category}</p>
-                            <p className="text-muted-foreground">Seller: {sellerName}</p>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Created: {new Date(product.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {product.status === 'pending' && (
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={async () => {
-                                try {
-                                  await productService.approveProduct(productId)
-                                  setAllProducts((prev) =>
-                                    prev.map((p) => {
-                                      const pId = p._id || p.id
-                                      return pId === productId ? { ...p, status: 'approved' } : p
-                                    })
-                                  )
-                                  const stats = await productService.getAdminProductStats()
-                                  setProductStats(stats)
-                                  toast({
-                                    title: 'Product Approved Successfully',
-                                    description: 'The product has been approved and is now visible to customers.',
-                                    variant: 'default',
-                                  })
-                                } catch (error: any) {
-                                  const errorMessage = error?.response?.data?.error || 'Failed to approve product'
-                                  toast({
-                                    title: 'Approval Failed',
-                                    description: errorMessage,
-                                    variant: 'destructive',
-                                  })
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-16">Image</th>
+                        <th className="px-4 py-3 text-left font-medium">Title</th>
+                        <th className="px-4 py-3 text-left font-medium">Description</th>
+                        <th className="px-4 py-3 text-left font-medium">Price</th>
+                        <th className="px-4 py-3 text-left font-medium">Category</th>
+                        <th className="px-4 py-3 text-left font-medium">Seller</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-left font-medium">Created</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allProducts.map((product) => {
+                        const productId = product._id || product.id
+                        const seller = product.sellerId as any
+                        const sellerName = typeof seller === 'object' ? (seller?.fullName || seller?.email || 'N/A') : 'N/A'
+
+                        return (
+                          <tr key={productId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3">
+                              <img
+                                src={getFirstImageUrl(product)}
+                                alt={product.title}
+                                className="h-12 w-12 rounded-lg object-cover"
+                              />
+                            </td>
+                            <td className="px-4 py-3 font-medium max-w-[180px]" title={product.title}>
+                              <span className="line-clamp-2">{product.title}</span>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate" title={product.description}>
+                              {product.description || '—'}
+                            </td>
+                            <td className="px-4 py-3 font-medium text-primary">${product.price?.toFixed(2) ?? '0.00'}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{product.category || '—'}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{sellerName}</td>
+                            <td className="px-4 py-3">
+                              <Badge
+                                variant={
+                                  product.status === 'approved' ? 'default' :
+                                  product.status === 'rejected' ? 'destructive' :
+                                  'secondary'
                                 }
-                              }}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              onClick={async () => {
-                                try {
-                                  await productService.rejectProduct(productId)
-                                  setAllProducts((prev) =>
-                                    prev.map((p) => {
-                                      const pId = p._id || p.id
-                                      return pId === productId ? { ...p, status: 'rejected' } : p
-                                    })
-                                  )
-                                  const stats = await productService.getAdminProductStats()
-                                  setProductStats(stats)
-                                  toast({
-                                    title: 'Product Rejected',
-                                    description: 'The product has been rejected and will not be visible to customers.',
-                                    variant: 'default',
-                                  })
-                                } catch (error: any) {
-                                  const errorMessage = error?.response?.data?.error || 'Failed to reject product'
-                                  toast({
-                                    title: 'Rejection Failed',
-                                    description: errorMessage,
-                                    variant: 'destructive',
-                                  })
-                                }
-                              }}
-                              variant="destructive"
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                                className="capitalize"
+                              >
+                                {product.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {new Date(product.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                {product.status !== 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      try {
+                                        await productService.approveProduct(productId)
+                                        setAllProducts((prev) =>
+                                          prev.map((p) => {
+                                            const pId = p._id || p.id
+                                            return pId === productId ? { ...p, status: 'approved' } : p
+                                          })
+                                        )
+                                        const stats = await productService.getAdminProductStats()
+                                        setProductStats(stats)
+                                        toast({
+                                          title: 'Product Approved',
+                                          description: 'The product has been approved and is now visible to customers.',
+                                          variant: 'default',
+                                        })
+                                      } catch (error: any) {
+                                        const errorMessage = error?.response?.data?.error || 'Failed to approve product'
+                                        toast({
+                                          title: 'Approval Failed',
+                                          description: errorMessage,
+                                          variant: 'destructive',
+                                        })
+                                      }
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    Approve
+                                  </Button>
+                                )}
+                                {product.status !== 'rejected' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      try {
+                                        await productService.rejectProduct(productId)
+                                        setAllProducts((prev) =>
+                                          prev.map((p) => {
+                                            const pId = p._id || p.id
+                                            return pId === productId ? { ...p, status: 'rejected' } : p
+                                          })
+                                        )
+                                        const stats = await productService.getAdminProductStats()
+                                        setProductStats(stats)
+                                        toast({
+                                          title: 'Product Rejected',
+                                          description: 'The product has been rejected and will not be visible to customers.',
+                                          variant: 'default',
+                                        })
+                                      } catch (error: any) {
+                                        const errorMessage = error?.response?.data?.error || 'Failed to reject product'
+                                        toast({
+                                          title: 'Rejection Failed',
+                                          description: errorMessage,
+                                          variant: 'destructive',
+                                        })
+                                      }
+                                    }}
+                                    variant="destructive"
+                                  >
+                                    Reject
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
-              {productsPagination.pages > 1 && (
+              {allProducts.length > 0 && (
                 <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
                   <Button
                     variant="outline"
