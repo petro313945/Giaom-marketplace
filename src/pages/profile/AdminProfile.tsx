@@ -19,6 +19,7 @@ export default function AdminProfile() {
   const { toast } = useToast()
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
+  const [sellersPagination, setSellersPagination] = useState({ page: 1, perPage: 10 })
   const [allProducts, setAllProducts] = useState<any[]>([])
   const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
   const [productStats, setProductStats] = useState({ total: 0, pending: 0 })
@@ -114,6 +115,12 @@ export default function AdminProfile() {
 
   const pendingSellers = allSellers.filter((s) => s.status === 'pending')
   const activeSellers = allSellers.filter((s) => s.status === 'approved').length
+
+  const sellersTotalPages = Math.ceil(allSellers.length / sellersPagination.perPage) || 1
+  const paginatedSellers = allSellers.slice(
+    (sellersPagination.page - 1) * sellersPagination.perPage,
+    sellersPagination.page * sellersPagination.perPage
+  )
   
   // Recent activity (last 5 orders)
   const recentOrders = allOrders.slice(0, 5)
@@ -255,97 +262,148 @@ export default function AdminProfile() {
               ) : allSellers.length === 0 ? (
                 <p className="text-muted-foreground">No sellers yet</p>
               ) : (
-                <div className="space-y-4">
-                  {allSellers.map((seller) => {
-                    const sellerId = (seller as any)._id || seller.id
-                    const user = seller.userId as any
-                    const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
-                    const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
-                    
-                    return (
-                      <div key={sellerId} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                        <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{seller.businessName}</p>
-                            <Badge variant={
-                              seller.status === 'approved' ? 'default' :
-                              seller.status === 'rejected' ? 'destructive' :
-                              'secondary'
-                            } className="capitalize">
-                              {seller.status}
-                            </Badge>
-                          </div>
-                          {seller.businessDescription && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">{seller.businessDescription}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground">Owner: {userName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Applied: {new Date(seller.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {seller.status === 'pending' && (
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={async () => {
-                                try {
-                                  await sellerService.approveSeller(sellerId)
-                                  setAllSellers((prev) =>
-                                    prev.map((s) => {
-                                      const sId = (s as any)._id || s.id
-                                      return sId === sellerId ? { ...s, status: 'approved' } : s
-                                    })
-                                  )
-                                  toast({
-                                    title: 'Seller Approved Successfully',
-                                    description: 'The seller has been approved and can now sell products.',
-                                    variant: 'default',
-                                  })
-                                } catch (error: any) {
-                                  const errorMessage = error?.response?.data?.error || 'Failed to approve seller'
-                                  toast({
-                                    title: 'Approval Failed',
-                                    description: errorMessage,
-                                    variant: 'destructive',
-                                  })
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
+                        <th className="px-4 py-3 text-left font-medium">Business Name</th>
+                        <th className="px-4 py-3 text-left font-medium">Description</th>
+                        <th className="px-4 py-3 text-left font-medium">Owner</th>
+                        <th className="px-4 py-3 text-left font-medium">Email</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-left font-medium">Applied</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedSellers.map((seller, index) => {
+                        const sellerId = (seller as any)._id || seller.id
+                        const user = seller.userId as any
+                        const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+                        const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
+                        const rowNo = (sellersPagination.page - 1) * sellersPagination.perPage + index + 1
+
+                        return (
+                          <tr key={sellerId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                            <td className="px-4 py-3 font-medium">{seller.businessName}</td>
+                            <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate" title={seller.businessDescription}>
+                              {seller.businessDescription || '—'}
+                            </td>
+                            <td className="px-4 py-3">{userName}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{userEmail}</td>
+                            <td className="px-4 py-3">
+                              <Badge
+                                variant={
+                                  seller.status === 'approved' ? 'default' :
+                                  seller.status === 'rejected' ? 'destructive' :
+                                  'secondary'
                                 }
-                              }}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              onClick={async () => {
-                                try {
-                                  await sellerService.rejectSeller(sellerId)
-                                  setAllSellers((prev) =>
-                                    prev.map((s) => {
-                                      const sId = (s as any)._id || s.id
-                                      return sId === sellerId ? { ...s, status: 'rejected' } : s
-                                    })
-                                  )
-                                  toast({
-                                    title: 'Seller Rejected',
-                                    description: 'The seller application has been rejected.',
-                                    variant: 'default',
-                                  })
-                                } catch (error: any) {
-                                  const errorMessage = error?.response?.data?.error || 'Failed to reject seller'
-                                  toast({
-                                    title: 'Rejection Failed',
-                                    description: errorMessage,
-                                    variant: 'destructive',
-                                  })
-                                }
-                              }}
-                              variant="destructive"
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                                className="capitalize"
+                              >
+                                {seller.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {new Date(seller.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                {seller.status !== 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      try {
+                                        await sellerService.approveSeller(sellerId)
+                                        setAllSellers((prev) =>
+                                          prev.map((s) => {
+                                            const sId = (s as any)._id || s.id
+                                            return sId === sellerId ? { ...s, status: 'approved' } : s
+                                          })
+                                        )
+                                        toast({
+                                          title: 'Seller Approved',
+                                          description: 'The seller has been approved and can now sell products.',
+                                          variant: 'default',
+                                        })
+                                      } catch (error: any) {
+                                        const errorMessage = error?.response?.data?.error || 'Failed to approve seller'
+                                        toast({
+                                          title: 'Approval Failed',
+                                          description: errorMessage,
+                                          variant: 'destructive',
+                                        })
+                                      }
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    Approve
+                                  </Button>
+                                )}
+                                {seller.status !== 'rejected' && (
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={async () => {
+                                      try {
+                                        await sellerService.rejectSeller(sellerId)
+                                        setAllSellers((prev) =>
+                                          prev.map((s) => {
+                                            const sId = (s as any)._id || s.id
+                                            return sId === sellerId ? { ...s, status: 'rejected' } : s
+                                          })
+                                        )
+                                        toast({
+                                          title: 'Seller Rejected',
+                                          description: seller.status === 'approved'
+                                            ? 'Seller approval has been revoked.'
+                                            : 'The seller application has been rejected.',
+                                          variant: 'default',
+                                        })
+                                      } catch (error: any) {
+                                        const errorMessage = error?.response?.data?.error || 'Failed to reject seller'
+                                        toast({
+                                          title: 'Rejection Failed',
+                                          description: errorMessage,
+                                          variant: 'destructive',
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    Reject
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {allSellers.length > 0 && allSellers.length > sellersPagination.perPage && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={sellersPagination.page <= 1}
+                    onClick={() => setSellersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {sellersPagination.page} of {sellersTotalPages} ({allSellers.length} total)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={sellersPagination.page >= sellersTotalPages}
+                    onClick={() => setSellersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </Button>
                 </div>
               )}
             </CardContent>
