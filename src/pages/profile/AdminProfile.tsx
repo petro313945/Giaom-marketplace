@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp } from 'lucide-react'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -20,6 +20,8 @@ export default function AdminProfile() {
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [sellersPagination, setSellersPagination] = useState({ page: 1, perPage: 10 })
+  const [usersPagination, setUsersPagination] = useState({ page: 1, perPage: 10 })
+  const [ordersPagination, setOrdersPagination] = useState({ page: 1, perPage: 10 })
   const [allProducts, setAllProducts] = useState<any[]>([])
   const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
   const [productStats, setProductStats] = useState({ total: 0, pending: 0 })
@@ -121,9 +123,35 @@ export default function AdminProfile() {
     (sellersPagination.page - 1) * sellersPagination.perPage,
     sellersPagination.page * sellersPagination.perPage
   )
+
+  const usersTotalPages = Math.ceil(allUsers.length / usersPagination.perPage) || 1
+  const paginatedUsers = allUsers.slice(
+    (usersPagination.page - 1) * usersPagination.perPage,
+    usersPagination.page * usersPagination.perPage
+  )
+
+  const ordersTotalPages = Math.ceil(allOrders.length / ordersPagination.perPage) || 1
+  const paginatedOrders = allOrders.slice(
+    (ordersPagination.page - 1) * ordersPagination.perPage,
+    ordersPagination.page * ordersPagination.perPage
+  )
   
   // Recent activity (last 5 orders)
   const recentOrders = allOrders.slice(0, 5)
+
+  const getRelativeTime = (date: string | Date) => {
+    const now = new Date()
+    const past = new Date(date)
+    const diffMs = now.getTime() - past.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return past.toLocaleDateString()
+  }
 
   return (
     <div className="container py-8">
@@ -182,34 +210,64 @@ export default function AdminProfile() {
       </div>
 
       {/* Recent Activity */}
-      {recentOrders.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest orders in the marketplace</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="divide-y">
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Recent Activity
+          </CardTitle>
+          <CardDescription>Latest 5 orders in the marketplace — click to view details</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-3" />
+              <p className="text-muted-foreground font-medium">No recent orders</p>
+              <p className="text-sm text-muted-foreground mt-1">New orders will appear here</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
               {recentOrders.map((order) => {
                 const orderId = order._id || order.id
+                const user = order.userId as any
+                const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
                 return (
-                  <div key={orderId} className="flex items-center gap-4 py-3 hover:bg-accent/50 transition-colors">
-                    <span className="font-medium text-sm">Order #{orderId.slice(-8)}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
-                    </span>
-                    <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                  <div
+                    key={orderId}
+                    onClick={() => navigate(`/order/${orderId}`)}
+                    className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-accent transition-colors cursor-pointer group"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                      <ShoppingCart className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">Order #{orderId.slice(-8)}</p>
+                      <p className="text-sm text-muted-foreground truncate">{userEmail}</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+                      <Clock className="h-4 w-4" />
+                      {getRelativeTime(order.createdAt)}
+                    </div>
+                    <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)} shrink-0`}>
                       {order.status}
                     </span>
-                    <span className="font-medium text-sm">${order.totalAmount.toFixed(2)}</span>
-                    <span className="text-sm text-muted-foreground">{order.items.length} items</span>
+                    <div className="text-right shrink-0">
+                      <p className="font-semibold text-primary">${order.totalAmount?.toFixed(2) ?? '0.00'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.items?.length ?? 0} {order.items?.length === 1 ? 'item' : 'items'}
+                      </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground shrink-0 transition-colors" />
                   </div>
                 )
               })}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+          {recentOrders.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">Max 5</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="sellers" className="space-y-6">
         <TabsList>
@@ -592,81 +650,121 @@ export default function AdminProfile() {
               ) : allUsers.length === 0 ? (
                 <p className="text-muted-foreground">No users yet</p>
               ) : (
-                <div className="space-y-4">
-                  {allUsers.map((user) => {
-                    const userId = (user as any)._id || user.id
-                    const isEditing = editingUserId === userId
-                    const userName = (user as any).fullName || user.name || user.email || 'N/A'
-                    
-                    return (
-                      <div key={userId} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1 flex-1">
-                          <p className="font-medium">{userName}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                          {isEditing ? (
-                            <div className="flex items-center gap-2 mt-2">
-                              <Select
-                                value={editingRole || user.role}
-                                onValueChange={(value) => setEditingRole(value)}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="customer">Customer</SelectItem>
-                                  <SelectItem value="seller">Seller</SelectItem>
-                                  <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                size="sm"
-                                onClick={() => handleRoleChange(userId, (editingRole || user.role) as any)}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingUserId(null)
-                                  setEditingRole('')
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <p className="text-sm capitalize font-medium">{user.role}</p>
-                          )}
-                        </div>
-                        {!isEditing && (
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditingUserId(userId)
-                                setEditingRole(user.role)
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit Role
-                            </Button>
-                            {user.role !== 'admin' && (
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDeleteUser(userId, userName)}
-                              >
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Delete
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
+                        <th className="px-4 py-3 text-left font-medium">Name</th>
+                        <th className="px-4 py-3 text-left font-medium">Email</th>
+                        <th className="px-4 py-3 text-left font-medium">Role</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedUsers.map((user, index) => {
+                        const userId = (user as any)._id || user.id
+                        const isEditing = editingUserId === userId
+                        const userName = (user as any).fullName || user.name || user.email || 'N/A'
+                        const rowNo = (usersPagination.page - 1) * usersPagination.perPage + index + 1
+
+                        return (
+                          <tr key={userId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                            <td className="px-4 py-3 font-medium">{userName}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
+                            <td className="px-4 py-3">
+                              {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <Select
+                                    value={editingRole || user.role}
+                                    onValueChange={(value) => setEditingRole(value)}
+                                  >
+                                    <SelectTrigger className="w-32 h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="customer">Customer</SelectItem>
+                                      <SelectItem value="seller">Seller</SelectItem>
+                                      <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleRoleChange(userId, (editingRole || user.role) as any)}
+                                  >
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setEditingUserId(null)
+                                      setEditingRole('')
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="capitalize font-medium">{user.role}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {!isEditing && (
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingUserId(userId)
+                                      setEditingRole(user.role)
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Edit Role
+                                  </Button>
+                                  {user.role !== 'admin' && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => handleDeleteUser(userId, userName)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-1" />
+                                      Delete
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {allUsers.length > 0 && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={usersPagination.page <= 1}
+                    onClick={() => setUsersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {usersPagination.page} of {usersTotalPages} ({allUsers.length} total)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={usersPagination.page >= usersTotalPages}
+                    onClick={() => setUsersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -723,37 +821,81 @@ export default function AdminProfile() {
               ) : allOrders.length === 0 ? (
                 <p className="text-muted-foreground">No orders yet</p>
               ) : (
-                <div className="divide-y">
-                  {allOrders.map((order) => {
-                    const orderId = order._id || order.id
-                    const user = order.userId as any
-                    const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
-                    
-                    return (
-                      <div key={orderId} className="flex items-center gap-4 py-3 hover:bg-accent/50 transition-colors">
-                        <span className="font-medium text-sm">Order #{orderId.slice(-8)}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
-                        </span>
-                        <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
-                          {order.status}
-                        </span>
-                        <span className="font-medium text-sm">${order.totalAmount.toFixed(2)}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
-                        </span>
-                        <span className="text-sm text-muted-foreground">Customer: {userEmail}</span>
-                        <Button 
-                          variant="outline"
-                          size="sm"
-                          className="ml-auto"
-                          onClick={() => navigate(`/order/${orderId}`)}
-                        >
-                          View Details
-                        </Button>
-                      </div>
-                    )
-                  })}
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
+                        <th className="px-4 py-3 text-left font-medium">Order ID</th>
+                        <th className="px-4 py-3 text-left font-medium">Date</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-left font-medium">Amount</th>
+                        <th className="px-4 py-3 text-left font-medium">Items</th>
+                        <th className="px-4 py-3 text-left font-medium">Customer</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedOrders.map((order, index) => {
+                        const orderId = order._id || order.id
+                        const user = order.userId as any
+                        const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+                        const rowNo = (ordersPagination.page - 1) * ordersPagination.perPage + index + 1
+
+                        return (
+                          <tr key={orderId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                            <td className="px-4 py-3 font-medium">#{orderId.slice(-8)}</td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                                {order.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium">${order.totalAmount?.toFixed(2) ?? '0.00'}</td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {order.items?.length ?? 0} {order.items?.length === 1 ? 'item' : 'items'}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">{userEmail}</td>
+                            <td className="px-4 py-3 text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/order/${orderId}`)}
+                              >
+                                View Details
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {allOrders.length > 0 && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={ordersPagination.page <= 1}
+                    onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {ordersPagination.page} of {ordersTotalPages} ({allOrders.length} total)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={ordersPagination.page >= ordersTotalPages}
+                    onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </Button>
                 </div>
               )}
             </CardContent>
