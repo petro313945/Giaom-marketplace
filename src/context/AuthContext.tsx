@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (data: LoginData) => Promise<AuthResponse>;
   register: (data: RegisterData) => Promise<AuthResponse>;
   logout: () => void;
+  updateUser: (user: User) => void;
   isAuthenticated: boolean;
 }
 
@@ -69,12 +70,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event('authStateChanged'));
   };
 
+  const handleUpdateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+  };
+
   const value: AuthContextType = {
     user,
     loading,
     login: handleLogin,
     register: handleRegister,
     logout: handleLogout,
+    updateUser: handleUpdateUser,
     isAuthenticated: !!user,
   };
 

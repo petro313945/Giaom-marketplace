@@ -484,6 +484,7 @@ export default function AdminProfile() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
                         <th className="px-4 py-3 text-left font-medium w-16">Image</th>
                         <th className="px-4 py-3 text-left font-medium">Title</th>
                         <th className="px-4 py-3 text-left font-medium">Description</th>
@@ -496,13 +497,15 @@ export default function AdminProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {allProducts.map((product) => {
+                      {allProducts.map((product, index) => {
                         const productId = product._id || product.id
                         const seller = product.sellerId as any
                         const sellerName = typeof seller === 'object' ? (seller?.fullName || seller?.email || 'N/A') : 'N/A'
+                        const rowNo = (productsPagination.page - 1) * 10 + index + 1
 
                         return (
                           <tr key={productId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
                             <td className="px-4 py-3">
                               <img
                                 src={getFirstImageUrl(product)}

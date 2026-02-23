@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Edit, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,12 +20,13 @@ import type { Product } from '../services/productService'
 
 interface ProductsListProps {
   products: Product[]
-  pagination?: { page: number; pages: number; total: number }
+  pagination?: { page: number; pages: number; total: number; limit?: number }
   onProductUpdated?: () => void
   onPageChange?: (page: number) => void
+  headerAction?: React.ReactNode
 }
 
-export default function ProductsList({ products, pagination, onProductUpdated, onPageChange }: ProductsListProps) {
+export default function ProductsList({ products, pagination, onProductUpdated, onPageChange, headerAction }: ProductsListProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -68,9 +70,12 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
   if (products.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>My Products</CardTitle>
-          <CardDescription>You haven't added any products yet</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 gap-4">
+          <div>
+            <CardTitle>My Products</CardTitle>
+            <CardDescription>You haven't added any products yet</CardDescription>
+          </div>
+          {headerAction}
         </CardHeader>
       </Card>
     )
@@ -79,86 +84,117 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
   return (
     <>
       <Card>
-        <CardHeader>
-          <CardTitle>My Products</CardTitle>
-          <CardDescription>Manage your product listings</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 gap-4">
+          <div>
+            <CardTitle>My Products</CardTitle>
+            <CardDescription>Manage your product listings</CardDescription>
+          </div>
+          {headerAction}
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {products.map((product) => {
-              const productId = product._id || product.id || ''
-              return (
-                <div key={productId} className="flex items-center justify-between p-4 border rounded-lg gap-4">
-                  <div className="flex items-center gap-4 min-w-0 flex-1">
-                    <div className="w-16 h-16 bg-muted rounded-lg relative overflow-hidden">
-                      <img
-                        src={getFirstImageUrl(product)}
-                        alt={product.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <p className="font-medium line-clamp-2" title={product.title}>{product.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        ${product.price} • {product.category}
-                      </p>
-                      <Badge
-                        variant={
-                          product.status === 'approved'
-                            ? 'default'
-                            : product.status === 'pending'
-                              ? 'secondary'
-                              : 'destructive'
-                        }
-                      >
-                        {product.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(product)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteClick(productId, product.title)}
-                      disabled={deletingId === productId}
-                    >
-                      {deletingId === productId ? 'Deleting...' : 'Delete'}
-                    </Button>
-                  </div>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="h-12 px-4 text-left font-medium w-14">No.</th>
+                  <th className="h-12 px-4 text-left font-medium">Image</th>
+                  <th className="h-12 px-4 text-left font-medium">Title</th>
+                  <th className="h-12 px-4 text-left font-medium">Price</th>
+                  <th className="h-12 px-4 text-left font-medium">Category</th>
+                  <th className="h-12 px-4 text-left font-medium">Status</th>
+                  <th className="h-12 px-4 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((product, index) => {
+                  const productId = product._id || product.id || ''
+                  const limit = pagination?.limit ?? (pagination?.pages ? Math.ceil((pagination?.total ?? 0) / pagination.pages) : 10)
+                  const rowNo = ((pagination?.page ?? 1) - 1) * limit + index + 1
+                  return (
+                    <tr key={productId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="h-16 px-4 align-middle font-medium">{rowNo}</td>
+                      <td className="h-16 px-4 align-middle">
+                        <div className="w-12 h-12 bg-muted rounded-md overflow-hidden flex-shrink-0">
+                          <img
+                            src={getFirstImageUrl(product)}
+                            alt={product.title}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </td>
+                      <td className="h-16 px-4 align-middle">
+                        <p className="font-medium line-clamp-2 max-w-[200px]" title={product.title}>{product.title}</p>
+                      </td>
+                      <td className="h-16 px-4 align-middle">${product.price}</td>
+                      <td className="h-16 px-4 align-middle">{product.category}</td>
+                      <td className="h-16 px-4 align-middle">
+                        <Badge
+                          variant={
+                            product.status === 'approved'
+                              ? 'default'
+                              : product.status === 'pending'
+                                ? 'secondary'
+                                : 'destructive'
+                          }
+                        >
+                          {product.status}
+                        </Badge>
+                      </td>
+                      <td className="h-16 px-4 align-middle text-right">
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(product)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteClick(productId, product.title)}
+                            disabled={deletingId === productId}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            {deletingId === productId ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {pagination && (
+              <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                <span className="text-muted-foreground">
+                  Showing {((pagination.page - 1) * (pagination.limit ?? 10)) + 1}–{Math.min(pagination.page * (pagination.limit ?? 10), pagination.total)} of {pagination.total} products
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pagination.page <= 1}
+                    onClick={() => onPageChange?.(pagination.page - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-muted-foreground min-w-[120px] text-center">
+                    Page {pagination.page} of {pagination.pages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pagination.page >= pagination.pages}
+                    onClick={() => onPageChange?.(pagination.page + 1)}
+                  >
+                    Next
+                  </Button>
                 </div>
-              )
-            })}
+              </div>
+            )}
           </div>
-          {pagination && pagination.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pagination.page <= 1}
-                onClick={() => onPageChange?.(pagination.page - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.pages} ({pagination.total} total)
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pagination.page >= pagination.pages}
-                onClick={() => onPageChange?.(pagination.page + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
       <EditProductForm

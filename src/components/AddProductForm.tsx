@@ -4,7 +4,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Upload, X } from 'lucide-react'
 import * as productService from '../services/productService'
@@ -168,9 +174,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
         fileInputRef.current.value = ''
       }
       setIsOpen(false)
-      if (onProductAdded) {
-        onProductAdded()
-      }
+      onProductAdded?.()
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to add product')
     } finally {
@@ -178,23 +182,31 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     }
   }
 
-  if (!isOpen) {
-    return (
+  return (
+    <>
       <Button onClick={() => setIsOpen(true)} className="gap-2">
         <Plus className="h-4 w-4" />
         Add Product
       </Button>
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add New Product</CardTitle>
-        <CardDescription>Create a new product listing with multiple images</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <Sheet
+        open={isOpen}
+        onOpenChange={(open) => {
+          setIsOpen(open)
+          if (!open) {
+            reset()
+            setImages([])
+            setUrlInputs([''])
+            setError(null)
+            if (fileInputRef.current) fileInputRef.current.value = ''
+          }
+        }}
+      >
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Add New Product</SheetTitle>
+            <SheetDescription>Create a new product listing with multiple images</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md">
               {error}
@@ -367,7 +379,8 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }

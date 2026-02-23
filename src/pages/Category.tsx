@@ -14,11 +14,14 @@ import * as categoryService from '../services/categoryService'
 import * as productService from '../services/productService'
 import { getFirstImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
+import type { Category } from '../services/categoryService'
 
 export default function Category() {
   const { slug } = useParams<{ slug: string }>()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [category, setCategory] = useState<any>(null)
+  const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
@@ -31,7 +34,6 @@ export default function Category() {
   const { addItem } = useCart()
   const { isAuthenticated } = useAuth()
   const { toast } = useToast()
-  const navigate = useNavigate()
 
   // Get current filter values from URL
   const minPrice = searchParams.get('minPrice') || ''
@@ -39,6 +41,19 @@ export default function Category() {
   const sortBy = searchParams.get('sortBy') || 'createdAt'
   const sortOrder = searchParams.get('sortOrder') || 'desc'
   const page = parseInt(searchParams.get('page') || '1', 10)
+
+  // Fetch all categories for the category selector
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await categoryService.getCategories()
+        setCategories(response.categories)
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
+      }
+    }
+    fetchCategories()
+  }, [])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -176,6 +191,26 @@ export default function Category() {
                         Clear
                       </Button>
                     )}
+                  </div>
+
+                  {/* Category Filter */}
+                  <div className="space-y-2">
+                    <Label>Category</Label>
+                    <Select
+                      value={slug || ''}
+                      onValueChange={(value) => navigate(`/category/${value}`)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat._id || cat.id} value={cat.slug}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Price Range */}
