@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 // Use network IP if accessing from network, otherwise localhost
 const getApiUrl = () => {
@@ -73,7 +73,18 @@ api.interceptors.response.use(
       }
     }
 
-    return Promise.reject(error);
+    // Format error message for better user experience
+    const errorMessage = error.response?.data?.error || 
+                         error.response?.data?.message || 
+                         error.message || 
+                         'An unexpected error occurred';
+    
+    // Create a formatted error object
+    const formattedError = new Error(errorMessage);
+    (formattedError as any).status = error.response?.status;
+    (formattedError as any).response = error.response;
+    
+    return Promise.reject(formattedError);
   }
 );
 

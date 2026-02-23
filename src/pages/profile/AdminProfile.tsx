@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
 import * as orderService from '../../services/orderService'
+import { getImageUrl } from '../../utils/imageUtils'
 
 export default function AdminProfile() {
+  const navigate = useNavigate()
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [allProducts, setAllProducts] = useState<any[]>([])
@@ -123,11 +127,14 @@ export default function AdminProfile() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Total Revenue
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${orderStats ? (orderStats.totalRevenue / 1000).toFixed(1) + 'K' : '0'}
+              ${orderStats ? orderStats.totalRevenue.toFixed(2) : '0.00'}
             </div>
             <p className="text-xs text-muted-foreground">
               {orderStats ? `${orderStats.totalOrders} orders` : 'No orders yet'}
@@ -234,11 +241,30 @@ export default function AdminProfile() {
                 <div className="space-y-4">
                   {allSellers.map((seller) => {
                     const sellerId = (seller as any)._id || seller.id
+                    const user = seller.userId as any
+                    const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+                    const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
+                    
                     return (
-                      <div key={sellerId} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1">
-                          <p className="font-medium">{seller.businessName}</p>
-                          <p className="text-sm text-muted-foreground capitalize">{seller.status}</p>
+                      <div key={sellerId} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{seller.businessName}</p>
+                            <Badge variant={
+                              seller.status === 'approved' ? 'default' :
+                              seller.status === 'rejected' ? 'destructive' :
+                              'secondary'
+                            } className="capitalize">
+                              {seller.status}
+                            </Badge>
+                          </div>
+                          {seller.businessDescription && (
+                            <p className="text-sm text-muted-foreground line-clamp-2">{seller.businessDescription}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">Owner: {userName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Applied: {new Date(seller.createdAt).toLocaleDateString()}
+                          </p>
                         </div>
                         {seller.status === 'pending' && (
                           <div className="flex gap-2">
@@ -306,12 +332,38 @@ export default function AdminProfile() {
                 <div className="space-y-4">
                   {allProducts.map((product) => {
                     const productId = product._id || product.id
+                    const seller = product.sellerId as any
+                    const sellerName = typeof seller === 'object' ? (seller?.fullName || seller?.email || 'N/A') : 'N/A'
+                    
                     return (
-                      <div key={productId} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="space-y-1">
-                          <p className="font-medium">{product.title}</p>
-                          <p className="text-sm text-muted-foreground">${product.price.toFixed(2)}</p>
-                          <p className="text-sm capitalize">{product.status}</p>
+                      <div key={productId} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50">
+                        <img
+                          src={getImageUrl(product.imageUrl)}
+                          alt={product.title}
+                          className="h-16 w-16 rounded-lg object-cover"
+                        />
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{product.title}</p>
+                            <Badge variant={
+                              product.status === 'approved' ? 'default' :
+                              product.status === 'rejected' ? 'destructive' :
+                              'secondary'
+                            } className="capitalize">
+                              {product.status}
+                            </Badge>
+                          </div>
+                          {product.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
+                          )}
+                          <div className="flex items-center gap-4 text-sm">
+                            <p className="font-medium text-primary">${product.price.toFixed(2)}</p>
+                            <p className="text-muted-foreground">Category: {product.category}</p>
+                            <p className="text-muted-foreground">Seller: {sellerName}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Created: {new Date(product.createdAt).toLocaleDateString()}
+                          </p>
                         </div>
                         {product.status === 'pending' && (
                           <div className="flex gap-2">
@@ -541,8 +593,11 @@ export default function AdminProfile() {
                             {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
                           </p>
                         </div>
-                        <Button variant="outline" asChild>
-                          <a href={`/order/${orderId}`}>View Details</a>
+                        <Button 
+                          variant="outline"
+                          onClick={() => navigate(`/order/${orderId}`)}
+                        >
+                          View Details
                         </Button>
                       </div>
                     )

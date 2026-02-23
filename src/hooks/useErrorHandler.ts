@@ -1,11 +1,11 @@
 import { useToast } from '@/components/ui/use-toast'
-import { getUserFriendlyMessage } from '@/utils/errorUtils'
+import { getErrorMessage } from '@/utils/errorHandler'
 
 export const useErrorHandler = () => {
   const { toast } = useToast()
 
-  const handleError = (error: any, customMessage?: string) => {
-    const message = customMessage || getUserFriendlyMessage(error)
+  const handleError = (error: unknown, customMessage?: string) => {
+    const message = customMessage || getErrorMessage(error)
     
     toast({
       variant: 'destructive',
@@ -16,7 +16,6 @@ export const useErrorHandler = () => {
 
   const handleSuccess = (message: string) => {
     toast({
-      variant: 'success',
       title: 'Success',
       description: message,
     })

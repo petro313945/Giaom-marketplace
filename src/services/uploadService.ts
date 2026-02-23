@@ -6,7 +6,11 @@ export interface UploadResponse {
   filename: string;
 }
 
-// Upload image file
+/**
+ * Upload a single image file
+ * @param file - The image file to upload
+ * @returns Promise with upload response containing imageUrl
+ */
 export const uploadImage = async (file: File): Promise<UploadResponse> => {
   const formData = new FormData();
   formData.append('image', file);

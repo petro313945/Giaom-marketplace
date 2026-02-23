@@ -208,13 +208,73 @@ export default function OrderDetail() {
               <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                {getStatusIcon(order.status)}
-                <div>
-                  <p className="font-medium capitalize">Status: <span className={getStatusColor(order.status)}>{order.status}</span></p>
-                  <p className="text-sm text-muted-foreground">
-                    Placed on {new Date(order.createdAt).toLocaleDateString()}
-                  </p>
+              {/* Order Status Tracking */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  {getStatusIcon(order.status)}
+                  <div>
+                    <p className="font-medium capitalize">Status: <span className={getStatusColor(order.status)}>{order.status}</span></p>
+                    <p className="text-sm text-muted-foreground">
+                      Placed on {new Date(order.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Status Timeline */}
+                <div className="border-t pt-4">
+                  <p className="text-sm font-medium mb-3">Order Tracking</p>
+                  <div className="space-y-3">
+                    {['pending', 'processing', 'shipped', 'delivered'].map((status) => {
+                      const isCancelled = order.status === 'cancelled'
+                      const isCompleted = !isCancelled && (
+                        (status === 'pending' && ['pending', 'processing', 'shipped', 'delivered'].includes(order.status)) ||
+                        (status === 'processing' && ['processing', 'shipped', 'delivered'].includes(order.status)) ||
+                        (status === 'shipped' && ['shipped', 'delivered'].includes(order.status)) ||
+                        (status === 'delivered' && order.status === 'delivered')
+                      )
+                      
+                      const isCurrent = order.status === status
+                      
+                      return (
+                        <div key={status} className="flex items-center gap-3">
+                          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                            isCancelled ? 'bg-gray-200' :
+                            isCompleted ? 'bg-primary text-primary-foreground' :
+                            'bg-gray-200 text-gray-400'
+                          }`}>
+                            {isCompleted ? (
+                              <CheckCircle className="h-4 w-4" />
+                            ) : (
+                              <div className={`w-2 h-2 rounded-full ${isCurrent && !isCancelled ? 'bg-primary' : 'bg-gray-300'}`} />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className={`text-sm font-medium ${
+                              isCompleted ? 'text-foreground' : 'text-muted-foreground'
+                            } capitalize`}>
+                              {status === 'pending' ? 'Order Placed' :
+                               status === 'processing' ? 'Processing' :
+                               status === 'shipped' ? 'Shipped' :
+                               'Delivered'}
+                            </p>
+                            {isCurrent && !isCancelled && (
+                              <p className="text-xs text-muted-foreground">Current status</p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {order.status === 'cancelled' && (
+                      <div className="flex items-center gap-3 pt-2 border-t">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-destructive text-destructive-foreground">
+                          <XCircle className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-destructive capitalize">Cancelled</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

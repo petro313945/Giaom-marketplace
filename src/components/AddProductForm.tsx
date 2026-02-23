@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus } from 'lucide-react'
+import { Plus, Upload, X } from 'lucide-react'
 import * as productService from '../services/productService'
 import * as categoryService from '../services/categoryService'
+import { uploadImage } from '../services/uploadService'
 
 interface AddProductFormProps {
   onProductAdded?: () => void
@@ -27,6 +28,10 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
   const [categories, setCategories] = useState<{ name: string; slug: string }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<ProductFormData>()
   const selectedCategory = watch('category')
 
@@ -42,6 +47,40 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     fetchCategories()
   }, [])
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file')
+        return
+      }
+      // Validate file size (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size must be less than 5MB')
+        return
+      }
+      setSelectedFile(file)
+      setError(null)
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+      // Clear imageUrl when file is selected
+      setValue('imageUrl', '')
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setSelectedFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const onSubmit = async (data: ProductFormData) => {
     if (!data.category) {
       setError('Please select a category')
@@ -52,15 +91,38 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     setError(null)
 
     try {
+      let finalImageUrl = data.imageUrl || '/placeholder.svg'
+
+      // Upload image if file is selected
+      if (selectedFile) {
+        setIsUploading(true)
+        try {
+          const uploadResponse = await uploadImage(selectedFile)
+          finalImageUrl = uploadResponse.imageUrl
+        } catch (uploadErr: any) {
+          setError(uploadErr.response?.data?.error || uploadErr.message || 'Failed to upload image')
+          setIsLoading(false)
+          setIsUploading(false)
+          return
+        } finally {
+          setIsUploading(false)
+        }
+      }
+
       await productService.createProduct({
         title: data.title,
         description: data.description,
         price: parseFloat(data.price),
         category: data.category,
-        imageUrl: data.imageUrl || '/placeholder.svg',
+        imageUrl: finalImageUrl,
       })
 
       reset()
+      setSelectedFile(null)
+      setImagePreview(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
       setIsOpen(false)
       if (onProductAdded) {
         onProductAdded()
@@ -155,22 +217,81 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">Image URL (Optional)</Label>
-            <Input
-              id="imageUrl"
-              type="url"
-              {...register('imageUrl')}
-              placeholder="https://example.com/image.jpg"
-            />
+            <Label htmlFor="image">Product Image</Label>
+            <div className="space-y-2">
+              {/* File Upload */}
+              <div className="flex items-center gap-2">
+                <Input
+                  id="image"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  ref={fileInputRef}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  {selectedFile ? 'Change Image' : 'Upload Image'}
+                </Button>
+                {selectedFile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveImage}
+                    className="gap-2"
+                  >
+                    <X className="h-4 w-4" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+
+              {/* Image Preview */}
+              {imagePreview && (
+                <div className="relative w-full max-w-xs">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="w-full h-48 object-cover rounded-md border"
+                  />
+                </div>
+              )}
+
+              {/* Or use URL */}
+              <div className="text-sm text-muted-foreground">OR</div>
+              <Input
+                id="imageUrl"
+                type="url"
+                {...register('imageUrl')}
+                placeholder="https://example.com/image.jpg"
+                disabled={!!selectedFile}
+              />
+              {selectedFile && (
+                <p className="text-xs text-muted-foreground">
+                  Remove uploaded image to use URL instead
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-2">
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Adding...' : 'Add Product'}
+            <Button type="submit" disabled={isLoading || isUploading}>
+              {isUploading ? 'Uploading...' : isLoading ? 'Adding...' : 'Add Product'}
             </Button>
             <Button type="button" variant="outline" onClick={() => {
               setIsOpen(false)
               reset()
+              setSelectedFile(null)
+              setImagePreview(null)
+              if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+              }
             }}>
               Cancel
             </Button>

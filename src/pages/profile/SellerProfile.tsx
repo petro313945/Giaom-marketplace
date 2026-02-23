@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ import ProductsList from '../../components/ProductsList'
 
 export default function SellerProfile() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [sellerProfile, setSellerProfile] = useState<sellerService.SellerProfile | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
@@ -151,21 +153,44 @@ export default function SellerProfile() {
                 <p className="text-muted-foreground">No orders yet</p>
               ) : (
                 <div className="space-y-4">
-                  {orders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="space-y-1">
-                        <p className="font-medium">Order #{order.id.slice(-8)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleDateString()}
-                        </p>
-                        <Badge variant={order.status === 'delivered' ? 'default' : 'secondary'}>
-                          {order.status}
-                        </Badge>
-                        <p className="text-sm font-medium">${order.totalAmount.toFixed(2)}</p>
+                  {orders.map((order) => {
+                    const orderId = order.id || (order as any)._id
+                    // Calculate order total for seller's products only
+                    const sellerOrderTotal = order.items?.reduce((sum: number, item: any) => {
+                      return sum + (item.price * item.quantity)
+                    }, 0) || order.totalAmount
+                    
+                    return (
+                      <div key={orderId} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                        <div className="space-y-1 flex-1">
+                          <p className="font-medium">Order #{orderId.slice(-8)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(order.createdAt).toLocaleDateString()}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge variant={
+                              order.status === 'delivered' ? 'default' :
+                              order.status === 'cancelled' ? 'destructive' :
+                              order.status === 'shipped' ? 'secondary' :
+                              'outline'
+                            } className="capitalize">
+                              {order.status}
+                            </Badge>
+                            <p className="text-sm font-medium">${sellerOrderTotal.toFixed(2)}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'} from your store
+                          </p>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => navigate(`/order/${orderId}`)}
+                        >
+                          View Details
+                        </Button>
                       </div>
-                      <Button variant="outline">View Details</Button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
