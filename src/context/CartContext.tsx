@@ -53,10 +53,10 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'accessToken') {
         if (e.newValue) {
-          // User logged in, fetch cart
+          // User logged in, fetch cart from database (cart persists across sessions)
           fetchCart();
         } else {
-          // User logged out, clear cart
+          // User logged out, hide cart UI (cart remains in database)
           setCart(null);
           setLoading(false);
         }
@@ -69,8 +69,10 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     const handleAuthChange = () => {
       const token = localStorage.getItem('accessToken');
       if (token) {
+        // User logged in, restore cart from database
         fetchCart();
       } else {
+        // User logged out, hide cart UI (cart persists in database)
         setCart(null);
         setLoading(false);
       }

@@ -61,7 +61,7 @@ export default function CartDrawer() {
                         className="h-20 w-20 rounded-lg object-cover"
                       />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate">{productName}</h3>
+                        <h3 className="font-medium truncate" title={productName}>{productName}</h3>
                         <p className="text-lg font-bold mt-1">${productPrice.toFixed(2)}</p>
                         <div className="flex items-center gap-2 mt-2">
                           <Button

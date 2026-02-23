@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,9 +7,12 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Star, Sliders, X } from 'lucide-react'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
+import { useToast } from '@/components/ui/use-toast'
 import * as productService from '../services/productService'
 import * as categoryService from '../services/categoryService'
-import { getImageUrl } from '../utils/imageUtils'
+import { getFirstImageUrl } from '../utils/imageUtils'
+import { truncateText } from '../utils/textUtils'
 import type { Product } from '../services/productService'
 import type { Category } from '../services/categoryService'
 
@@ -36,6 +39,9 @@ export default function Search() {
   const page = parseInt(searchParams.get('page') || '1', 10)
 
   const { addItem } = useCart()
+  const { isAuthenticated } = useAuth()
+  const { toast } = useToast()
+  const navigate = useNavigate()
 
   // Fetch categories
   useEffect(() => {
@@ -114,11 +120,38 @@ export default function Search() {
   const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Check authentication first
+    if (!isAuthenticated) {
+      toast({
+        title: 'Login Required',
+        description: 'Please log in to add items to your cart.',
+        variant: 'default',
+      })
+      navigate('/auth/login')
+      return
+    }
+    
     try {
       const productId = product._id || product.id
       await addItem(productId, 1)
+      toast({
+        title: 'Added to Cart',
+        description: `${product.title} has been added to your cart.`,
+        variant: 'default',
+      })
     } catch (error: any) {
-      alert(error?.message || 'Failed to add to cart')
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
+      toast({
+        title: 'Error',
+        description: errorMessage.includes('log in') 
+          ? 'Please log in to add items to your cart.' 
+          : errorMessage,
+        variant: 'destructive',
+      })
+      if (errorMessage.includes('log in')) {
+        setTimeout(() => navigate('/auth/login'), 1500)
+      }
     }
   }
 
@@ -276,13 +309,13 @@ export default function Search() {
                       <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
                         <CardContent className="p-0">
                           <img
-                            src={getImageUrl(product.imageUrl)}
+                            src={getFirstImageUrl(product)}
                             alt={product.title}
                             className="w-full h-64 object-cover rounded-t-lg"
                           />
                         </CardContent>
                         <CardFooter className="flex flex-col items-start gap-2 p-4">
-                          <h4 className="font-semibold text-lg">{product.title}</h4>
+                          <h4 className="font-semibold text-lg" title={product.title}>{truncateText(product.title, 80)}</h4>
                           <div className="flex items-center gap-1">
                             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                             <span className="text-sm font-medium">4.5</span>
@@ -312,7 +345,7 @@ export default function Search() {
                     Previous
                   </Button>
                   <span className="text-sm text-muted-foreground">
-                    Page {pagination.page} of {pagination.pages}
+                    Page {pagination.page} of {pagination.pages} ({pagination.total} total)
                   </span>
                   <Button
                     variant="outline"

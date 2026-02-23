@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardFooter } from './ui/card'
 import { Button } from './ui/button'
 import { Star } from 'lucide-react'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
+import { useToast } from './ui/use-toast'
 import * as productService from '../services/productService'
-import { getImageUrl } from '../utils/imageUtils'
+import { getFirstImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
 
 export default function FeaturedProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const { addItem } = useCart()
+  const { isAuthenticated } = useAuth()
+  const { toast } = useToast()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -31,13 +36,38 @@ export default function FeaturedProducts() {
   const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Check authentication first
+    if (!isAuthenticated) {
+      toast({
+        title: 'Login Required',
+        description: 'Please log in to add items to your cart.',
+        variant: 'default',
+      })
+      navigate('/auth/login')
+      return
+    }
+    
     try {
       const productId = product._id || product.id
       await addItem(productId, 1)
-      // Success feedback could be added here with toast
+      toast({
+        title: 'Added to Cart',
+        description: `${product.title} has been added to your cart.`,
+        variant: 'default',
+      })
     } catch (error: any) {
       const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
-      alert(errorMessage)
+      toast({
+        title: 'Error',
+        description: errorMessage.includes('log in') 
+          ? 'Please log in to add items to your cart.' 
+          : errorMessage,
+        variant: 'destructive',
+      })
+      if (errorMessage.includes('log in')) {
+        setTimeout(() => navigate('/auth/login'), 1500)
+      }
     }
   }
 
@@ -69,13 +99,13 @@ export default function FeaturedProducts() {
             <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
               <CardContent className="p-0">
                 <img
-                  src={getImageUrl(product.imageUrl)}
+                  src={getFirstImageUrl(product)}
                   alt={product.title}
                   className="w-full h-64 object-cover rounded-t-lg"
                 />
               </CardContent>
               <CardFooter className="flex flex-col items-start gap-2 p-4">
-                <h4 className="font-semibold text-lg">{product.title}</h4>
+                <h4 className="font-semibold text-lg line-clamp-2" title={product.title}>{product.title}</h4>
                 <div className="flex items-center gap-1">
                   <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                   <span className="text-sm font-medium">4.5</span>

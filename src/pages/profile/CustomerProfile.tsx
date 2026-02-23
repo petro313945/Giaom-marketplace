@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
 import { Package, Heart, MapPin, CreditCard, User } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import * as orderService from '../../services/orderService'
@@ -73,33 +74,26 @@ export default function CustomerProfile() {
               ) : orders.length === 0 ? (
                 <p className="text-muted-foreground">No orders yet</p>
               ) : (
-                <div className="space-y-4">
+                <div className="divide-y">
                   {orders.map((order) => {
                     const orderId = order.id || (order as any)._id
                     return (
-                      <div key={orderId} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
-                        <div className="space-y-1 flex-1">
-                          <p className="font-medium">Order #{orderId.slice(-8)}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Placed on {new Date(order.createdAt).toLocaleDateString()}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant={
-                              order.status === 'delivered' ? 'default' :
-                              order.status === 'cancelled' ? 'destructive' :
-                              order.status === 'shipped' ? 'secondary' :
-                              'outline'
-                            } className="capitalize">
-                              {order.status}
-                            </Badge>
-                            <p className="text-sm font-medium">${order.totalAmount.toFixed(2)}</p>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
-                          </p>
-                        </div>
+                      <div key={orderId} className="flex items-center gap-4 py-3 hover:bg-accent/50 transition-colors">
+                        <span className="font-medium text-sm">Order #{orderId.slice(-8)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          Placed on {new Date(order.createdAt).toLocaleDateString()}
+                        </span>
+                        <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                        <span className="font-medium text-sm">${order.totalAmount.toFixed(2)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
+                        </span>
                         <Button 
                           variant="outline" 
+                          size="sm"
+                          className="ml-auto"
                           onClick={() => navigate(`/order/${orderId}`)}
                         >
                           View Details

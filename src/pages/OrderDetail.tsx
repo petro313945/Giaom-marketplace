@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '../context/AuthContext'
 import * as orderService from '../services/orderService'
 import { getImageUrl } from '../utils/imageUtils'
+import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../utils/orderStatusUtils'
 import type { Order } from '../services/orderService'
 
 export default function OrderDetail() {
@@ -64,23 +65,6 @@ export default function OrderDetail() {
         return <XCircle className="h-5 w-5" />
       default:
         return <Package className="h-5 w-5" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'text-yellow-600'
-      case 'processing':
-        return 'text-blue-600'
-      case 'shipped':
-        return 'text-purple-600'
-      case 'delivered':
-        return 'text-green-600'
-      case 'cancelled':
-        return 'text-red-600'
-      default:
-        return 'text-gray-600'
     }
   }
 
@@ -213,7 +197,7 @@ export default function OrderDetail() {
                 <div className="flex items-center gap-2">
                   {getStatusIcon(order.status)}
                   <div>
-                    <p className="font-medium capitalize">Status: <span className={getStatusColor(order.status)}>{order.status}</span></p>
+                    <p className="font-medium capitalize">Status: <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>{order.status}</span></p>
                     <p className="text-sm text-muted-foreground">
                       Placed on {new Date(order.createdAt).toLocaleDateString()}
                     </p>

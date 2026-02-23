@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
 import { Package, ShoppingBag, TrendingUp, DollarSign } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import * as sellerService from '../../services/sellerService'
@@ -19,19 +20,27 @@ export default function SellerProfile() {
   const navigate = useNavigate()
   const [sellerProfile, setSellerProfile] = useState<sellerService.SellerProfile | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+
+  const fetchProducts = async (page = 1) => {
+    const response = await productService.getSellerProducts({ page, limit: 10 })
+    setProducts(response.products)
+    setProductsPagination(response.pagination)
+  }
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [profile, productsData, ordersData] = await Promise.all([
+        const [profile, productsResponse, ordersData] = await Promise.all([
           sellerService.getCurrentSellerProfile().catch(() => ({ sellerProfile: null })),
-          productService.getSellerProducts(),
+          productService.getSellerProducts({ page: 1, limit: 10 }),
           orderService.getSellerOrders().catch(() => ({ orders: [] })),
         ])
         setSellerProfile(profile.sellerProfile || null)
-        setProducts(productsData)
+        setProducts(productsResponse.products)
+        setProductsPagination(productsResponse.pagination)
         setOrders(ordersData.orders || [])
       } catch (error) {
         console.error('Failed to fetch seller data:', error)
@@ -43,9 +52,8 @@ export default function SellerProfile() {
     fetchData()
   }, [])
 
-  const handleProductAdded = async () => {
-    const productsData = await productService.getSellerProducts()
-    setProducts(productsData)
+  const handleProductAdded = () => {
+    fetchProducts(productsPagination.page)
   }
 
   if (loading) {
@@ -99,9 +107,9 @@ export default function SellerProfile() {
             <CardTitle className="text-sm font-medium">Products</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{products.length}</div>
+            <div className="text-2xl font-bold">{productsPagination.total}</div>
             <p className="text-xs text-muted-foreground">
-              {products.filter((p) => p.status === 'approved').length} approved
+              Total listings
             </p>
           </CardContent>
         </Card>
@@ -139,7 +147,12 @@ export default function SellerProfile() {
 
         <TabsContent value="products" className="space-y-4">
           <AddProductForm onProductAdded={handleProductAdded} />
-          <ProductsList products={products} onProductUpdated={handleProductAdded} />
+          <ProductsList
+            products={products}
+            pagination={productsPagination}
+            onProductUpdated={handleProductAdded}
+            onPageChange={(page) => fetchProducts(page)}
+          />
         </TabsContent>
 
         <TabsContent value="orders" className="space-y-4">
@@ -152,38 +165,30 @@ export default function SellerProfile() {
               {orders.length === 0 ? (
                 <p className="text-muted-foreground">No orders yet</p>
               ) : (
-                <div className="space-y-4">
+                <div className="divide-y">
                   {orders.map((order) => {
                     const orderId = order.id || (order as any)._id
-                    // Calculate order total for seller's products only
                     const sellerOrderTotal = order.items?.reduce((sum: number, item: any) => {
                       return sum + (item.price * item.quantity)
                     }, 0) || order.totalAmount
                     
                     return (
-                      <div key={orderId} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
-                        <div className="space-y-1 flex-1">
-                          <p className="font-medium">Order #{orderId.slice(-8)}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleDateString()}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant={
-                              order.status === 'delivered' ? 'default' :
-                              order.status === 'cancelled' ? 'destructive' :
-                              order.status === 'shipped' ? 'secondary' :
-                              'outline'
-                            } className="capitalize">
-                              {order.status}
-                            </Badge>
-                            <p className="text-sm font-medium">${sellerOrderTotal.toFixed(2)}</p>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'} from your store
-                          </p>
-                        </div>
+                      <div key={orderId} className="flex items-center gap-4 py-3 hover:bg-accent/50 transition-colors">
+                        <span className="font-medium text-sm">Order #{orderId.slice(-8)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          Placed on {new Date(order.createdAt).toLocaleDateString()}
+                        </span>
+                        <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                        <span className="font-medium text-sm">${sellerOrderTotal.toFixed(2)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
+                        </span>
                         <Button 
                           variant="outline" 
+                          size="sm"
+                          className="ml-auto"
                           onClick={() => navigate(`/order/${orderId}`)}
                         >
                           View Details

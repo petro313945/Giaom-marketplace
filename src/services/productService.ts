@@ -9,6 +9,7 @@ export interface Product {
   price: number;
   category: string;
   imageUrl?: string;
+  imageUrls?: string[]; // Array of image URLs
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -52,6 +53,7 @@ export interface CreateProductData {
   price: number;
   category: string;
   imageUrl?: string;
+  imageUrls?: string[]; // Array of image URLs
 }
 
 export const createProduct = async (data: CreateProductData): Promise<{ message: string; product: Product }> => {
@@ -59,16 +61,28 @@ export const createProduct = async (data: CreateProductData): Promise<{ message:
   return response.data;
 };
 
-// Get seller's products
-export const getSellerProducts = async (): Promise<Product[]> => {
-  const response = await api.get<{ products: Product[] }>('/products/seller/my-products');
-  return response.data.products;
+// Get seller's products (with pagination)
+export const getSellerProducts = async (params?: { page?: number; limit?: number }): Promise<ProductsResponse> => {
+  const response = await api.get<{ products: Product[]; pagination: ProductsResponse['pagination'] }>('/products/seller/my-products', { params });
+  return {
+    products: response.data.products,
+    pagination: response.data.pagination
+  };
 };
 
-// Get all products (admin only)
-export const getAllProducts = async (): Promise<Product[]> => {
-  const response = await api.get<{ products: Product[] }>('/products/admin/all');
-  return response.data.products;
+// Get admin product stats (total and pending counts)
+export const getAdminProductStats = async (): Promise<{ total: number; pending: number }> => {
+  const response = await api.get<{ total: number; pending: number }>('/products/admin/stats');
+  return response.data;
+};
+
+// Get all products (admin only, with pagination)
+export const getAllProducts = async (params?: { page?: number; limit?: number; status?: string }): Promise<ProductsResponse> => {
+  const response = await api.get<{ products: Product[]; pagination: ProductsResponse['pagination'] }>('/products/admin/all', { params });
+  return {
+    products: response.data.products,
+    pagination: response.data.pagination
+  };
 };
 
 // Approve product (admin only)
@@ -80,5 +94,26 @@ export const approveProduct = async (id: string): Promise<{ message: string; pro
 // Reject product (admin only)
 export const rejectProduct = async (id: string): Promise<{ message: string; product: Product }> => {
   const response = await api.put<{ message: string; product: Product }>(`/products/${id}/reject`);
+  return response.data;
+};
+
+// Update product (seller/owner only)
+export interface UpdateProductData {
+  title?: string;
+  description?: string;
+  price?: number;
+  category?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+}
+
+export const updateProduct = async (id: string, data: UpdateProductData): Promise<{ message: string; product: Product }> => {
+  const response = await api.put<{ message: string; product: Product }>(`/products/${id}`, data);
+  return response.data;
+};
+
+// Delete product (seller/owner only)
+export const deleteProduct = async (id: string): Promise<{ message: string }> => {
+  const response = await api.delete<{ message: string }>(`/products/${id}`);
   return response.data;
 };

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/components/ui/use-toast'
 import { Store, TrendingUp, Shield, Zap } from 'lucide-react'
 import * as sellerService from '../services/sellerService'
 
@@ -16,6 +17,7 @@ interface BecomeSellerFormData {
 
 export default function BecomeSeller() {
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { register, handleSubmit, formState: { errors } } = useForm<BecomeSellerFormData>()
@@ -29,10 +31,23 @@ export default function BecomeSeller() {
         businessName: data.businessName,
         businessDescription: data.businessDescription,
       })
-      alert('Seller application submitted successfully! Please wait for admin approval.')
-      navigate('/profile')
+      toast({
+        title: 'Application Submitted Successfully!',
+        description: 'Your seller application has been submitted. Please wait for admin approval.',
+        variant: 'default',
+      })
+      // Navigate after a short delay to show the toast
+      setTimeout(() => {
+        navigate('/profile')
+      }, 1500)
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to submit application')
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to submit application'
+      setError(errorMessage)
+      toast({
+        title: 'Application Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
     } finally {
       setIsLoading(false)
     }

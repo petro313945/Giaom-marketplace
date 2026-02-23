@@ -5,36 +5,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { useToast } from '@/components/ui/use-toast'
 import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
 import * as orderService from '../../services/orderService'
-import { getImageUrl } from '../../utils/imageUtils'
+import { getFirstImageUrl } from '../../utils/imageUtils'
+import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
 
 export default function AdminProfile() {
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [allProducts, setAllProducts] = useState<any[]>([])
+  const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
+  const [productStats, setProductStats] = useState({ total: 0, pending: 0 })
   const [allOrders, setAllOrders] = useState<any[]>([])
   const [orderStats, setOrderStats] = useState<{ totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editingRole, setEditingRole] = useState<string>('')
 
+  const fetchProducts = async (page = 1) => {
+    const response = await productService.getAllProducts({ page, limit: 10 })
+    setAllProducts(response.products)
+    setProductsPagination(response.pagination)
+  }
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [users, sellers, products, ordersData] = await Promise.all([
+        const [users, sellers, productStatsData, productsResponse, ordersData] = await Promise.all([
           userService.getAllUsers(),
           sellerService.getAllSellers(),
-          productService.getAllProducts(),
+          productService.getAdminProductStats(),
+          productService.getAllProducts({ page: 1, limit: 10 }),
           orderService.getAllOrders(),
         ])
         setAllUsers(users)
         setAllSellers(sellers)
-        setAllProducts(products)
+        setProductStats(productStatsData)
+        setAllProducts(productsResponse.products)
+        setProductsPagination(productsResponse.pagination)
         setAllOrders(ordersData.orders)
         setOrderStats(ordersData.statistics)
       } catch (error) {
@@ -57,9 +71,18 @@ export default function AdminProfile() {
         })
       )
       setEditingUserId(null)
-      alert('User role updated successfully')
+      toast({
+        title: 'User Role Updated',
+        description: 'The user role has been updated successfully.',
+        variant: 'default',
+      })
     } catch (error: any) {
-      alert(error?.response?.data?.error || 'Failed to update user role')
+      const errorMessage = error?.response?.data?.error || 'Failed to update user role'
+      toast({
+        title: 'Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
     }
   }
 
@@ -74,14 +97,22 @@ export default function AdminProfile() {
         const uId = (u as any)._id || u.id
         return uId !== userId
       }))
-      alert('User deleted successfully')
+      toast({
+        title: 'User Deleted',
+        description: 'The user has been deleted successfully.',
+        variant: 'default',
+      })
     } catch (error: any) {
-      alert(error?.response?.data?.error || 'Failed to delete user')
+      const errorMessage = error?.response?.data?.error || 'Failed to delete user'
+      toast({
+        title: 'Deletion Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
     }
   }
 
   const pendingSellers = allSellers.filter((s) => s.status === 'pending')
-  const pendingProducts = allProducts.filter((p) => p.status === 'pending')
   const activeSellers = allSellers.filter((s) => s.status === 'approved').length
   
   // Recent activity (last 5 orders)
@@ -120,8 +151,8 @@ export default function AdminProfile() {
             <CardTitle className="text-sm font-medium">Total Products</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{allProducts.length}</div>
-            <p className="text-xs text-muted-foreground">{pendingProducts.length} pending review</p>
+            <div className="text-2xl font-bold">{productStats.total}</div>
+            <p className="text-xs text-muted-foreground">{productStats.pending} pending review</p>
           </CardContent>
         </Card>
 
@@ -151,34 +182,20 @@ export default function AdminProfile() {
             <CardDescription>Latest orders in the marketplace</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="divide-y">
               {recentOrders.map((order) => {
                 const orderId = order._id || order.id
-                const getStatusColor = (status: string) => {
-                  switch (status) {
-                    case 'pending': return 'bg-yellow-100 text-yellow-800'
-                    case 'processing': return 'bg-blue-100 text-blue-800'
-                    case 'shipped': return 'bg-purple-100 text-purple-800'
-                    case 'delivered': return 'bg-green-100 text-green-800'
-                    case 'cancelled': return 'bg-red-100 text-red-800'
-                    default: return 'bg-gray-100 text-gray-800'
-                  }
-                }
                 return (
-                  <div key={orderId} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="space-y-1">
-                      <p className="font-medium">Order #{orderId.slice(-8)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
-                      </p>
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold">${order.totalAmount.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">{order.items.length} items</p>
-                    </div>
+                  <div key={orderId} className="flex items-center gap-4 py-3 hover:bg-accent/50 transition-colors">
+                    <span className="font-medium text-sm">Order #{orderId.slice(-8)}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
+                    </span>
+                    <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                      {order.status}
+                    </span>
+                    <span className="font-medium text-sm">${order.totalAmount.toFixed(2)}</span>
+                    <span className="text-sm text-muted-foreground">{order.items.length} items</span>
                   </div>
                 )
               })}
@@ -201,9 +218,9 @@ export default function AdminProfile() {
           <TabsTrigger value="products" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             Products
-            {pendingProducts.length > 0 && (
+            {productStats.pending > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {pendingProducts.length}
+                {productStats.pending}
               </span>
             )}
           </TabsTrigger>
@@ -278,9 +295,18 @@ export default function AdminProfile() {
                                       return sId === sellerId ? { ...s, status: 'approved' } : s
                                     })
                                   )
-                                  alert('Seller approved successfully')
+                                  toast({
+                                    title: 'Seller Approved Successfully',
+                                    description: 'The seller has been approved and can now sell products.',
+                                    variant: 'default',
+                                  })
                                 } catch (error: any) {
-                                  alert(error?.response?.data?.error || 'Failed to approve seller')
+                                  const errorMessage = error?.response?.data?.error || 'Failed to approve seller'
+                                  toast({
+                                    title: 'Approval Failed',
+                                    description: errorMessage,
+                                    variant: 'destructive',
+                                  })
                                 }
                               }}
                               className="bg-green-600 hover:bg-green-700"
@@ -297,9 +323,18 @@ export default function AdminProfile() {
                                       return sId === sellerId ? { ...s, status: 'rejected' } : s
                                     })
                                   )
-                                  alert('Seller rejected')
+                                  toast({
+                                    title: 'Seller Rejected',
+                                    description: 'The seller application has been rejected.',
+                                    variant: 'default',
+                                  })
                                 } catch (error: any) {
-                                  alert(error?.response?.data?.error || 'Failed to reject seller')
+                                  const errorMessage = error?.response?.data?.error || 'Failed to reject seller'
+                                  toast({
+                                    title: 'Rejection Failed',
+                                    description: errorMessage,
+                                    variant: 'destructive',
+                                  })
                                 }
                               }}
                               variant="destructive"
@@ -338,13 +373,13 @@ export default function AdminProfile() {
                     return (
                       <div key={productId} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50">
                         <img
-                          src={getImageUrl(product.imageUrl)}
+                          src={getFirstImageUrl(product)}
                           alt={product.title}
                           className="h-16 w-16 rounded-lg object-cover"
                         />
                         <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{product.title}</p>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <p className="font-medium line-clamp-2" title={product.title}>{product.title}</p>
                             <Badge variant={
                               product.status === 'approved' ? 'default' :
                               product.status === 'rejected' ? 'destructive' :
@@ -377,9 +412,20 @@ export default function AdminProfile() {
                                       return pId === productId ? { ...p, status: 'approved' } : p
                                     })
                                   )
-                                  alert('Product approved successfully')
+                                  const stats = await productService.getAdminProductStats()
+                                  setProductStats(stats)
+                                  toast({
+                                    title: 'Product Approved Successfully',
+                                    description: 'The product has been approved and is now visible to customers.',
+                                    variant: 'default',
+                                  })
                                 } catch (error: any) {
-                                  alert(error?.response?.data?.error || 'Failed to approve product')
+                                  const errorMessage = error?.response?.data?.error || 'Failed to approve product'
+                                  toast({
+                                    title: 'Approval Failed',
+                                    description: errorMessage,
+                                    variant: 'destructive',
+                                  })
                                 }
                               }}
                               className="bg-green-600 hover:bg-green-700"
@@ -396,9 +442,20 @@ export default function AdminProfile() {
                                       return pId === productId ? { ...p, status: 'rejected' } : p
                                     })
                                   )
-                                  alert('Product rejected')
+                                  const stats = await productService.getAdminProductStats()
+                                  setProductStats(stats)
+                                  toast({
+                                    title: 'Product Rejected',
+                                    description: 'The product has been rejected and will not be visible to customers.',
+                                    variant: 'default',
+                                  })
                                 } catch (error: any) {
-                                  alert(error?.response?.data?.error || 'Failed to reject product')
+                                  const errorMessage = error?.response?.data?.error || 'Failed to reject product'
+                                  toast({
+                                    title: 'Rejection Failed',
+                                    description: errorMessage,
+                                    variant: 'destructive',
+                                  })
                                 }
                               }}
                               variant="destructive"
@@ -410,6 +467,29 @@ export default function AdminProfile() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+              {productsPagination.pages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={productsPagination.page <= 1}
+                    onClick={() => fetchProducts(productsPagination.page - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {productsPagination.page} of {productsPagination.pages} ({productsPagination.total} total)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={productsPagination.page >= productsPagination.pages}
+                    onClick={() => fetchProducts(productsPagination.page + 1)}
+                  >
+                    Next
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -559,42 +639,30 @@ export default function AdminProfile() {
               ) : allOrders.length === 0 ? (
                 <p className="text-muted-foreground">No orders yet</p>
               ) : (
-                <div className="space-y-4">
+                <div className="divide-y">
                   {allOrders.map((order) => {
                     const orderId = order._id || order.id
-                    const getStatusColor = (status: string) => {
-                      switch (status) {
-                        case 'pending': return 'bg-yellow-100 text-yellow-800'
-                        case 'processing': return 'bg-blue-100 text-blue-800'
-                        case 'shipped': return 'bg-purple-100 text-purple-800'
-                        case 'delivered': return 'bg-green-100 text-green-800'
-                        case 'cancelled': return 'bg-red-100 text-red-800'
-                        default: return 'bg-gray-100 text-gray-800'
-                      }
-                    }
                     const user = order.userId as any
                     const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
                     
                     return (
-                      <div key={orderId} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                        <div className="space-y-1 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">Order #{orderId.slice(-8)}</p>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
-                              {order.status}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">Customer: {userEmail}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
-                          </p>
-                          <p className="text-sm font-medium">${order.totalAmount.toFixed(2)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
-                          </p>
-                        </div>
+                      <div key={orderId} className="flex items-center gap-4 py-3 hover:bg-accent/50 transition-colors">
+                        <span className="font-medium text-sm">Order #{orderId.slice(-8)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
+                        </span>
+                        <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                        <span className="font-medium text-sm">${order.totalAmount.toFixed(2)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+                        </span>
+                        <span className="text-sm text-muted-foreground">Customer: {userEmail}</span>
                         <Button 
                           variant="outline"
+                          size="sm"
+                          className="ml-auto"
                           onClick={() => navigate(`/order/${orderId}`)}
                         >
                           View Details

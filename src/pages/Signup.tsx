@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useForm } from 'react-hook-form'
+import { useToast } from '@/components/ui/use-toast'
 import type { RegisterData } from '../services/authService'
 
 export default function Signup() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { register: registerUser } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const { register, handleSubmit, formState: { errors } } = useForm<RegisterData>()
 
@@ -15,10 +17,27 @@ export default function Signup() {
     try {
       setError('')
       setLoading(true)
-      await registerUser(data)
-      navigate('/')
+      const response = await registerUser(data)
+      
+      // Show success message
+      toast({
+        title: 'Account Created Successfully!',
+        description: 'Your account has been created. Welcome to Giaom Marketplace!',
+        variant: 'default',
+      })
+      
+      // Navigate after a short delay to show the toast
+      setTimeout(() => {
+        navigate('/')
+      }, 1000)
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Registration failed. Please try again.')
+      const errorMessage = err.response?.data?.error || err.message || 'Registration failed. Please try again.'
+      setError(errorMessage)
+      toast({
+        title: 'Registration Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }

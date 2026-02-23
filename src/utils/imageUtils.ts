@@ -26,3 +26,17 @@ export const getImageUrl = (imageUrl?: string | null): string => {
   // Default to placeholder
   return '/placeholder.svg';
 };
+
+/**
+ * Get the first image URL from an array or single image
+ * Useful for product listings that show one image
+ */
+export const getFirstImageUrl = (product: { imageUrl?: string; imageUrls?: string[] } | null | undefined): string => {
+  if (!product) {
+    return '/placeholder.svg';
+  }
+  if (product.imageUrls && product.imageUrls.length > 0) {
+    return getImageUrl(product.imageUrls[0]);
+  }
+  return getImageUrl(product.imageUrl);
+};

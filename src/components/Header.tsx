@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Search, User, Menu } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { useToast } from './ui/use-toast'
 import { useAuth } from '../context/AuthContext'
 import CartDrawer from './CartDrawer'
 import * as categoryService from '../services/categoryService'
@@ -12,6 +13,7 @@ export default function Header() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categories, setCategories] = useState<categoryService.Category[]>([])
   const { isAuthenticated, user, logout } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -29,7 +31,15 @@ export default function Header() {
 
   const handleLogout = () => {
     logout()
-    navigate('/auth/login')
+    toast({
+      title: 'Logged Out Successfully',
+      description: 'You have been logged out. Thank you for using Giaom Marketplace!',
+      variant: 'default',
+    })
+    // Navigate after a short delay to show the toast
+    setTimeout(() => {
+      navigate('/auth/login')
+    }, 500)
   }
 
   const handleSearch = (e: React.FormEvent) => {
@@ -66,26 +76,25 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          {!isAuthenticated && (
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/become-seller">Become a Seller</Link>
-            </Button>
-          )}
           {isAuthenticated && (
             <>
+              {user?.role === 'customer' && (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/become-seller">Become a Seller</Link>
+                </Button>
+              )}
+              <CartDrawer />
               <Button variant="ghost" size="icon" asChild>
                 <Link to="/profile">
                   <User className="h-5 w-5" />
                 </Link>
               </Button>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                Logout
+              </Button>
             </>
           )}
-          <CartDrawer />
-          {isAuthenticated ? (
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              Logout
-            </Button>
-          ) : (
+          {!isAuthenticated && (
             <>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/auth/login">Sign In</Link>

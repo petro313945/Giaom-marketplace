@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useForm } from 'react-hook-form'
+import { useToast } from '@/components/ui/use-toast'
 import type { LoginData } from '../services/authService'
 
 export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const { register, handleSubmit, formState: { errors } } = useForm<LoginData>()
 
@@ -15,10 +17,38 @@ export default function Login() {
     try {
       setError('')
       setLoading(true)
-      await login(data)
-      navigate('/')
+      const response = await login(data)
+      
+      // Show role-specific success message
+      const role = response.user.role
+      let welcomeMessage = 'Welcome back!'
+      
+      if (role === 'admin') {
+        welcomeMessage = 'Welcome, Administrator! You have full access to manage the marketplace.'
+      } else if (role === 'seller') {
+        welcomeMessage = 'Welcome back, Seller! Manage your products and orders.'
+      } else if (role === 'customer') {
+        welcomeMessage = 'Welcome back! Start shopping and discover great products.'
+      }
+      
+      toast({
+        title: 'Login Successful',
+        description: welcomeMessage,
+        variant: 'default',
+      })
+      
+      // Navigate after a short delay to show the toast
+      setTimeout(() => {
+        navigate('/')
+      }, 1000)
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Login failed. Please try again.')
+      const errorMessage = err.response?.data?.error || err.message || 'Login failed. Please try again.'
+      setError(errorMessage)
+      toast({
+        title: 'Login Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/components/ui/use-toast'
 import { useCart } from '../context/CartContext'
 import * as orderService from '../services/orderService'
 import type { ShippingAddress } from '../services/orderService'
@@ -22,6 +23,7 @@ interface CheckoutFormData {
 export default function Checkout() {
   const { cart, loading: cartLoading, clearCart } = useCart()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { register, handleSubmit, formState: { errors } } = useForm<CheckoutFormData>()
@@ -76,10 +78,18 @@ export default function Checkout() {
 
       await orderService.createOrder(shippingAddress)
       await clearCart()
-      navigate('/')
-      alert('Order placed successfully!')
+      toast({
+        title: 'Order Placed Successfully!',
+        description: 'Thank you for your order. We will process it shortly.',
+        variant: 'default',
+      })
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to place order')
+      toast({
+        title: 'Order Failed',
+        description: err.response?.data?.error || err.message || 'Failed to place order',
+        variant: 'destructive',
+      })
     } finally {
       setIsSubmitting(false)
     }
