@@ -11,6 +11,8 @@ import Search from './pages/Search'
 import OrderDetail from './pages/OrderDetail'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Checkout from './pages/Checkout'
 import BecomeSeller from './pages/BecomeSeller'
 import Profile from './pages/Profile'
@@ -38,6 +40,8 @@ function App() {
               />
               <Route path="/auth/login" element={<Login />} />
               <Route path="/auth/sign-up" element={<Signup />} />
+              <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route 
                 path="/checkout" 
                 element={

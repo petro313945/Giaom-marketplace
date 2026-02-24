@@ -1,14 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
+import { MapPin, Star, Plus } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import * as orderService from '../services/orderService'
+import * as addressService from '../services/addressService'
 import type { ShippingAddress } from '../services/orderService'
+import type { Address } from '../services/addressService'
 
 interface CheckoutFormData {
   fullName: string
@@ -26,7 +30,64 @@ export default function Checkout() {
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { register, handleSubmit, formState: { errors } } = useForm<CheckoutFormData>()
+  const [addresses, setAddresses] = useState<Address[]>([])
+  const [loadingAddresses, setLoadingAddresses] = useState(false)
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const [useNewAddress, setUseNewAddress] = useState(false)
+  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<CheckoutFormData>()
+
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      setLoadingAddresses(true)
+      try {
+        const response = await addressService.getUserAddresses()
+        setAddresses(response.addresses)
+        // Auto-select default address if available
+        const defaultAddress = response.addresses.find(addr => addr.isDefault)
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id)
+          fillFormWithAddress(defaultAddress)
+        }
+      } catch (error) {
+        console.error('Failed to fetch addresses:', error)
+        // If addresses fail to load, allow manual entry
+        setUseNewAddress(true)
+      } finally {
+        setLoadingAddresses(false)
+      }
+    }
+
+    fetchAddresses()
+  }, [])
+
+  const fillFormWithAddress = (address: Address) => {
+    setValue('fullName', address.fullName)
+    setValue('address', address.address)
+    setValue('city', address.city)
+    setValue('state', address.state || '')
+    setValue('zipCode', address.zipCode)
+    setValue('country', address.country)
+    setValue('phone', address.phone || '')
+  }
+
+  const handleSelectAddress = (address: Address) => {
+    setSelectedAddressId(address.id)
+    setUseNewAddress(false)
+    fillFormWithAddress(address)
+  }
+
+  const handleUseNewAddress = () => {
+    setSelectedAddressId(null)
+    setUseNewAddress(true)
+    // Clear form
+    setValue('fullName', '')
+    setValue('address', '')
+    setValue('city', '')
+    setValue('state', '')
+    setValue('zipCode', '')
+    setValue('country', '')
+    setValue('phone', '')
+  }
 
   if (cartLoading) {
     return (
@@ -108,9 +169,79 @@ export default function Checkout() {
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Saved Addresses Section */}
+            {!loadingAddresses && addresses.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Select Shipping Address</CardTitle>
+                  <CardDescription>Choose from your saved addresses or enter a new one</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {addresses.map((address) => (
+                    <div
+                      key={address.id}
+                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                        selectedAddressId === address.id && !useNewAddress
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      onClick={() => handleSelectAddress(address)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold">{address.fullName}</h4>
+                            {address.isDefault && (
+                              <Badge variant="default" className="text-xs">
+                                <Star className="h-3 w-3 mr-1" />
+                                Default
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{address.address}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {address.city}
+                            {address.state && `, ${address.state}`} {address.zipCode}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{address.country}</p>
+                          {address.phone && (
+                            <p className="text-sm text-muted-foreground mt-1">Phone: {address.phone}</p>
+                          )}
+                        </div>
+                        <div className="ml-4">
+                          <input
+                            type="radio"
+                            checked={selectedAddressId === address.id && !useNewAddress}
+                            onChange={() => handleSelectAddress(address)}
+                            className="h-4 w-4 text-primary"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleUseNewAddress}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Use New Address
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Shipping Information Form */}
             <Card>
               <CardHeader>
-                <CardTitle>Shipping Information</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  {addresses.length > 0 && !useNewAddress ? 'Selected Address' : 'Shipping Information'}
+                </CardTitle>
+                {addresses.length > 0 && !useNewAddress && (
+                  <CardDescription>Review or modify the selected address below</CardDescription>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">

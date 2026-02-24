@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import CustomerProfile from './profile/CustomerProfile'
 import SellerProfile from './profile/SellerProfile'
@@ -6,6 +6,8 @@ import AdminProfile from './profile/AdminProfile'
 
 export default function Profile() {
   const { user, loading } = useAuth()
+  const [searchParams] = useSearchParams()
+  const tab = searchParams.get('tab')
 
   if (loading) {
     return (
@@ -28,5 +30,5 @@ export default function Profile() {
     return <SellerProfile />
   }
 
-  return <CustomerProfile />
+  return <CustomerProfile defaultTab={tab || undefined} />
 }

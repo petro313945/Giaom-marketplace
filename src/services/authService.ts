@@ -51,6 +51,21 @@ export const refreshToken = async (refreshToken: string): Promise<{ accessToken:
   return response.data;
 };
 
+// Request password reset
+export const requestPasswordReset = async (email: string): Promise<{ message: string }> => {
+  const response = await api.post<{ message: string }>('/auth/forgot-password', { email });
+  return response.data;
+};
+
+// Reset password with token
+export const resetPassword = async (token: string, newPassword: string): Promise<{ message: string }> => {
+  const response = await api.post<{ message: string }>('/auth/reset-password', {
+    token,
+    newPassword,
+  });
+  return response.data;
+};
+
 // Logout (client-side only, clears tokens)
 export const logout = (): void => {
   localStorage.removeItem('accessToken');

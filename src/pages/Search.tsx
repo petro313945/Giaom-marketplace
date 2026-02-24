@@ -13,6 +13,7 @@ import * as productService from '../services/productService'
 import * as categoryService from '../services/categoryService'
 import { getFirstImageUrl } from '../utils/imageUtils'
 import { truncateText } from '../utils/textUtils'
+import ProductRating from '../components/ProductRating'
 import type { Product } from '../services/productService'
 import type { Category } from '../services/categoryService'
 
@@ -316,11 +317,7 @@ export default function Search() {
                         </CardContent>
                         <CardFooter className="flex flex-col items-start gap-2 p-4">
                           <h4 className="font-semibold text-lg" title={product.title}>{truncateText(product.title, 80)}</h4>
-                          <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                            <span className="text-sm font-medium">4.5</span>
-                            <span className="text-sm text-muted-foreground">(0)</span>
-                          </div>
+                          <ProductRating productId={productId} size="sm" showCount />
                           <div className="flex items-center justify-between w-full">
                             <span className="text-xl font-bold">${product.price}</span>
                             <Button size="sm" onClick={(e) => handleAddToCart(e, product)}>

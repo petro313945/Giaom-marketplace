@@ -1,31 +1,75 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { useToast } from '@/components/ui/use-toast'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, Heart, MapPin, CreditCard, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Package, Heart, MapPin, CreditCard, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import * as orderService from '../../services/orderService'
 import * as userService from '../../services/userService'
+import * as addressService from '../../services/addressService'
+import * as wishlistService from '../../services/wishlistService'
+import { getImageUrl } from '../../utils/imageUtils'
+import { Link } from 'react-router-dom'
 import type { Order } from '../../services/orderService'
+import type { Address, CreateAddressData } from '../../services/addressService'
+import type { WishlistItem } from '../../services/wishlistService'
+import type { Product } from '../../services/productService'
 
 interface ProfileFormData {
   fullName: string
 }
 
-export default function CustomerProfile() {
+interface AddressFormData {
+  fullName: string
+  address: string
+  city: string
+  state: string
+  zipCode: string
+  country: string
+  phone: string
+  isDefault: boolean
+}
+
+interface CustomerProfileProps {
+  defaultTab?: string
+}
+
+export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {}) {
   const { user, updateUser } = useAuth()
   const navigate = useNavigate()
+  const { toast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Valid tab values
+  const validTabs = ['orders', 'wishlist', 'addresses', 'payment', 'profile']
+  
+  // Get active tab from URL or use default
+  const urlTab = searchParams.get('tab')
+  const activeTab = (urlTab && validTabs.includes(urlTab)) 
+    ? urlTab 
+    : (defaultTab && validTabs.includes(defaultTab)) 
+      ? defaultTab 
+      : 'orders'
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, limit: 10 })
   const [loading, setLoading] = useState(true)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [addresses, setAddresses] = useState<Address[]>([])
+  const [loadingAddresses, setLoadingAddresses] = useState(false)
+  const [isAddingAddress, setIsAddingAddress] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null)
+  const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
+  const [loadingWishlist, setLoadingWishlist] = useState(false)
   
   const {
     register,
@@ -51,6 +95,38 @@ export default function CustomerProfile() {
     }
 
     fetchOrders()
+  }, [])
+
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      setLoadingAddresses(true)
+      try {
+        const response = await addressService.getUserAddresses()
+        setAddresses(response.addresses)
+      } catch (error) {
+        console.error('Failed to fetch addresses:', error)
+      } finally {
+        setLoadingAddresses(false)
+      }
+    }
+
+    fetchAddresses()
+  }, [])
+
+  useEffect(() => {
+    const fetchWishlist = async () => {
+      setLoadingWishlist(true)
+      try {
+        const response = await wishlistService.getWishlist()
+        setWishlistItems(response.wishlist.items)
+      } catch (error) {
+        console.error('Failed to fetch wishlist:', error)
+      } finally {
+        setLoadingWishlist(false)
+      }
+    }
+
+    fetchWishlist()
   }, [])
 
   useEffect(() => {
@@ -86,6 +162,135 @@ export default function CustomerProfile() {
     }
   }
 
+  const {
+    register: registerAddress,
+    handleSubmit: handleSubmitAddress,
+    formState: { errors: addressErrors },
+    reset: resetAddress,
+    setValue: setAddressValue,
+  } = useForm<AddressFormData>()
+
+  const handleAddAddress = () => {
+    setIsAddingAddress(true)
+    setEditingAddressId(null)
+    resetAddress({
+      fullName: '',
+      address: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: '',
+      phone: '',
+      isDefault: false,
+    })
+  }
+
+  const handleEditAddress = (address: Address) => {
+    setIsAddingAddress(true)
+    setEditingAddressId(address.id)
+    setAddressValue('fullName', address.fullName)
+    setAddressValue('address', address.address)
+    setAddressValue('city', address.city)
+    setAddressValue('state', address.state || '')
+    setAddressValue('zipCode', address.zipCode)
+    setAddressValue('country', address.country)
+    setAddressValue('phone', address.phone || '')
+    setAddressValue('isDefault', address.isDefault)
+  }
+
+  const handleCancelAddress = () => {
+    setIsAddingAddress(false)
+    setEditingAddressId(null)
+    resetAddress()
+  }
+
+  const onAddressSubmit = async (data: AddressFormData) => {
+    setIsSavingAddress(true)
+    try {
+      const addressData: CreateAddressData = {
+        fullName: data.fullName,
+        address: data.address,
+        city: data.city,
+        state: data.state || undefined,
+        zipCode: data.zipCode,
+        country: data.country,
+        phone: data.phone || undefined,
+        isDefault: data.isDefault,
+      }
+
+      if (editingAddressId) {
+        await addressService.updateAddress(editingAddressId, addressData)
+        toast({
+          title: 'Address Updated',
+          description: 'Your address has been updated successfully.',
+        })
+      } else {
+        await addressService.createAddress(addressData)
+        toast({
+          title: 'Address Added',
+          description: 'Your address has been added successfully.',
+        })
+      }
+
+      // Refresh addresses
+      const response = await addressService.getUserAddresses()
+      setAddresses(response.addresses)
+      setIsAddingAddress(false)
+      setEditingAddressId(null)
+      resetAddress()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || error.message || 'Failed to save address',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingAddress(false)
+    }
+  }
+
+  const handleDeleteAddress = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this address?')) {
+      return
+    }
+
+    try {
+      await addressService.deleteAddress(id)
+      toast({
+        title: 'Address Deleted',
+        description: 'Your address has been deleted successfully.',
+      })
+      // Refresh addresses
+      const response = await addressService.getUserAddresses()
+      setAddresses(response.addresses)
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || error.message || 'Failed to delete address',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleSetDefault = async (id: string) => {
+    try {
+      await addressService.setDefaultAddress(id)
+      toast({
+        title: 'Default Address Updated',
+        description: 'Your default address has been updated.',
+      })
+      // Refresh addresses
+      const response = await addressService.getUserAddresses()
+      setAddresses(response.addresses)
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || error.message || 'Failed to set default address',
+        variant: 'destructive',
+      })
+    }
+  }
+
   return (
     <div className="container py-8">
       <div className="mb-8">
@@ -93,7 +298,9 @@ export default function CustomerProfile() {
         <p className="text-muted-foreground">Manage your account and view your orders</p>
       </div>
 
-      <Tabs defaultValue="orders" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setSearchParams({ tab: value })
+      }} className="space-y-6">
         <TabsList>
           <TabsTrigger value="orders" className="gap-2">
             <Package className="h-4 w-4" />
@@ -240,7 +447,84 @@ export default function CustomerProfile() {
               <CardDescription>Items you've saved for later</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">No items in your wishlist yet</p>
+              {loadingWishlist ? (
+                <div className="text-center py-4">Loading wishlist...</div>
+              ) : wishlistItems.length === 0 ? (
+                <div className="text-center py-8">
+                  <Heart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-4">No items in your wishlist yet</p>
+                  <Button onClick={() => navigate('/')}>
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Start Shopping
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {wishlistItems.map((item) => {
+                    const product = item.productId as Product
+                    const productId = product._id || product.id
+                    const productImage = getImageUrl(product.imageUrl)
+                    
+                    return (
+                      <Card key={item.id} className="overflow-hidden">
+                        <Link to={`/product/${productId}`}>
+                          <div className="relative aspect-square overflow-hidden">
+                            <img
+                              src={productImage}
+                              alt={product.title}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            />
+                          </div>
+                        </Link>
+                        <CardContent className="p-4">
+                          <Link to={`/product/${productId}`}>
+                            <h4 className="font-semibold mb-2 line-clamp-2 hover:text-primary">
+                              {product.title}
+                            </h4>
+                          </Link>
+                          <p className="text-lg font-bold text-primary mb-3">${product.price}</p>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => navigate(`/product/${productId}`)}
+                            >
+                              View
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await wishlistService.removeFromWishlist(productId)
+                                  toast({
+                                    title: 'Removed from Wishlist',
+                                    description: 'Item has been removed from your wishlist.',
+                                  })
+                                  // Refresh wishlist
+                                  const response = await wishlistService.getWishlist()
+                                  setWishlistItems(response.wishlist.items)
+                                  // Dispatch event to update header wishlist count
+                                  window.dispatchEvent(new Event('wishlistChanged'))
+                                } catch (error: any) {
+                                  toast({
+                                    title: 'Error',
+                                    description: error.response?.data?.error || error.message || 'Failed to remove item',
+                                    variant: 'destructive',
+                                  })
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -248,11 +532,190 @@ export default function CustomerProfile() {
         <TabsContent value="addresses" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Saved Addresses</CardTitle>
-              <CardDescription>Manage your delivery addresses</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Saved Addresses</CardTitle>
+                  <CardDescription>Manage your delivery addresses</CardDescription>
+                </div>
+                {!isAddingAddress && (
+                  <Button onClick={handleAddAddress}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add New Address
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <Button>Add New Address</Button>
+              {isAddingAddress ? (
+                <form onSubmit={handleSubmitAddress(onAddressSubmit)} className="space-y-4">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address-fullName">Full Name *</Label>
+                      <Input
+                        id="address-fullName"
+                        {...registerAddress('fullName', { required: 'Full name is required' })}
+                      />
+                      {addressErrors.fullName && (
+                        <p className="text-sm text-destructive">{addressErrors.fullName.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="address-phone">Phone</Label>
+                      <Input
+                        id="address-phone"
+                        type="tel"
+                        {...registerAddress('phone')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="address-address">Address *</Label>
+                    <Input
+                      id="address-address"
+                      {...registerAddress('address', { required: 'Address is required' })}
+                    />
+                    {addressErrors.address && (
+                      <p className="text-sm text-destructive">{addressErrors.address.message}</p>
+                    )}
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address-city">City *</Label>
+                      <Input
+                        id="address-city"
+                        {...registerAddress('city', { required: 'City is required' })}
+                      />
+                      {addressErrors.city && (
+                        <p className="text-sm text-destructive">{addressErrors.city.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="address-state">State/Province</Label>
+                      <Input
+                        id="address-state"
+                        {...registerAddress('state')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address-zipCode">ZIP Code *</Label>
+                      <Input
+                        id="address-zipCode"
+                        {...registerAddress('zipCode', { required: 'ZIP code is required' })}
+                      />
+                      {addressErrors.zipCode && (
+                        <p className="text-sm text-destructive">{addressErrors.zipCode.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="address-country">Country *</Label>
+                      <Input
+                        id="address-country"
+                        {...registerAddress('country', { required: 'Country is required' })}
+                      />
+                      {addressErrors.country && (
+                        <p className="text-sm text-destructive">{addressErrors.country.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="address-isDefault"
+                      {...registerAddress('isDefault')}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <Label htmlFor="address-isDefault" className="cursor-pointer">
+                      Set as default address
+                    </Label>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={isSavingAddress}>
+                      {isSavingAddress ? 'Saving...' : editingAddressId ? 'Update Address' : 'Save Address'}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleCancelAddress} disabled={isSavingAddress}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : loadingAddresses ? (
+                <div className="text-center py-4">Loading addresses...</div>
+              ) : addresses.length === 0 ? (
+                <div className="text-center py-8">
+                  <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-4">No saved addresses yet</p>
+                  <Button onClick={handleAddAddress}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Your First Address
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {addresses.map((address) => (
+                    <Card key={address.id} className={address.isDefault ? 'border-primary' : ''}>
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-semibold">{address.fullName}</h4>
+                              {address.isDefault && (
+                                <Badge variant="default" className="text-xs">
+                                  <Star className="h-3 w-3 mr-1" />
+                                  Default
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">{address.address}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {address.city}
+                              {address.state && `, ${address.state}`} {address.zipCode}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{address.country}</p>
+                            {address.phone && (
+                              <p className="text-sm text-muted-foreground mt-1">Phone: {address.phone}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            {!address.isDefault && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSetDefault(address.id)}
+                                title="Set as default"
+                              >
+                                <Star className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditAddress(address)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteAddress(address.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

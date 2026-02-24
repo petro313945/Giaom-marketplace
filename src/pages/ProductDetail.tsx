@@ -2,13 +2,20 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
-import { Star, ShoppingCart, ArrowLeft } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Star, ShoppingCart, ArrowLeft, Heart } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import * as productService from '../services/productService'
+import * as wishlistService from '../services/wishlistService'
+import * as reviewService from '../services/reviewService'
+import RatingDisplay from '../components/RatingDisplay'
+import ReviewList from '../components/ReviewList'
+import ReviewForm from '../components/ReviewForm'
 import { getImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
+import type { ReviewStats, Review } from '../services/reviewService'
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>()
@@ -23,6 +30,11 @@ export default function ProductDetail() {
   const [added, setAdded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [inWishlist, setInWishlist] = useState(false)
+  const [wishlistLoading, setWishlistLoading] = useState(false)
+  const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
+  const [userReview, setUserReview] = useState<Review | null>(null)
+  const [loadingReviewStats, setLoadingReviewStats] = useState(false)
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -70,6 +82,55 @@ export default function ProductDetail() {
     fetchProduct()
   }, [id])
 
+  useEffect(() => {
+    const checkWishlistStatus = async () => {
+      if (!isAuthenticated || !product) return
+      
+      try {
+        const productId = product._id || product.id
+        const response = await wishlistService.checkWishlistStatus(productId)
+        setInWishlist(response.inWishlist)
+      } catch (error) {
+        console.error('Failed to check wishlist status:', error)
+      }
+    }
+
+    checkWishlistStatus()
+  }, [isAuthenticated, product])
+
+  useEffect(() => {
+    const fetchReviewData = async () => {
+      if (!product) return
+      
+      const productId = product._id || product.id
+      if (!productId) return
+
+      try {
+        setLoadingReviewStats(true)
+        const [statsResponse, reviewResponse] = await Promise.allSettled([
+          reviewService.getReviewStats(productId),
+          isAuthenticated ? reviewService.getUserReview(productId).catch(() => null) : Promise.resolve(null)
+        ])
+
+        if (statsResponse.status === 'fulfilled') {
+          setReviewStats(statsResponse.value)
+        }
+
+        if (reviewResponse.status === 'fulfilled' && reviewResponse.value && reviewResponse.value.review) {
+          setUserReview(reviewResponse.value.review)
+        } else {
+          setUserReview(null)
+        }
+      } catch (error) {
+        console.error('Failed to fetch review data:', error)
+      } finally {
+        setLoadingReviewStats(false)
+      }
+    }
+
+    fetchReviewData()
+  }, [product, isAuthenticated])
+
   const handleAddToCart = async () => {
     if (!product) return
     
@@ -107,6 +168,51 @@ export default function ProductDetail() {
       if (errorMessage.includes('log in')) {
         setTimeout(() => navigate('/auth/login'), 1500)
       }
+    }
+  }
+
+  const handleToggleWishlist = async () => {
+    if (!product) return
+
+    if (!isAuthenticated) {
+      toast({
+        title: 'Login Required',
+        description: 'Please log in to add items to your wishlist.',
+        variant: 'default',
+      })
+      navigate('/auth/login')
+      return
+    }
+
+    setWishlistLoading(true)
+    try {
+      const productId = product._id || product.id
+      if (inWishlist) {
+        await wishlistService.removeFromWishlist(productId)
+        setInWishlist(false)
+        toast({
+          title: 'Removed from Wishlist',
+          description: `${product.title} has been removed from your wishlist.`,
+        })
+      } else {
+        await wishlistService.addToWishlist(productId)
+        setInWishlist(true)
+        toast({
+          title: 'Added to Wishlist',
+          description: `${product.title} has been added to your wishlist.`,
+        })
+      }
+      // Dispatch event to update header wishlist count
+      window.dispatchEvent(new Event('wishlistChanged'))
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || error.message || 'Failed to update wishlist'
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setWishlistLoading(false)
     }
   }
 
@@ -185,11 +291,19 @@ export default function ProductDetail() {
           <div>
             <h1 className="text-3xl font-bold mb-2">{product.title}</h1>
             <div className="flex items-center gap-2 mb-4">
-              <div className="flex items-center gap-1">
-                <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                <span className="font-medium">4.5</span>
-              </div>
-              <span className="text-muted-foreground">(0 reviews)</span>
+              {reviewStats ? (
+                <RatingDisplay
+                  rating={reviewStats.averageRating}
+                  totalReviews={reviewStats.totalReviews}
+                  showCount
+                  size="md"
+                />
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Star className="h-5 w-5 text-gray-300" />
+                  <span className="text-muted-foreground">No ratings yet</span>
+                </div>
+              )}
             </div>
             <p className="text-3xl font-bold">${product.price}</p>
           </div>
@@ -206,16 +320,146 @@ export default function ProductDetail() {
             <p className="font-medium capitalize">{product.category}</p>
           </div>
 
-          <Button 
-            size="lg" 
-            className="w-full md:w-auto" 
-            onClick={handleAddToCart} 
-            disabled={added}
-          >
-            <ShoppingCart className="mr-2 h-5 w-5" />
-            {added ? "Added to Cart!" : "Add to Cart"}
-          </Button>
+          <div className="flex gap-3">
+            <Button 
+              size="lg" 
+              className="flex-1" 
+              onClick={handleAddToCart} 
+              disabled={added}
+            >
+              <ShoppingCart className="mr-2 h-5 w-5" />
+              {added ? "Added to Cart!" : "Add to Cart"}
+            </Button>
+            <Button
+              size="lg"
+              variant={inWishlist ? "default" : "outline"}
+              onClick={handleToggleWishlist}
+              disabled={wishlistLoading}
+              className="px-4"
+            >
+              <Heart className={`h-5 w-5 ${inWishlist ? 'fill-current' : ''}`} />
+            </Button>
+          </div>
         </div>
+      </div>
+
+      {/* Reviews Section */}
+      <div className="mt-16">
+        <Tabs defaultValue="reviews" className="w-full">
+          <TabsList>
+            <TabsTrigger value="reviews">Reviews</TabsTrigger>
+            {isAuthenticated && !userReview && (
+              <TabsTrigger value="write-review">Write a Review</TabsTrigger>
+            )}
+          </TabsList>
+          
+          <TabsContent value="reviews" className="mt-6">
+            {reviewStats && reviewStats.totalReviews > 0 && (
+              <div className="mb-6 p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold">{reviewStats.averageRating.toFixed(1)}</div>
+                    <RatingDisplay rating={reviewStats.averageRating} size="sm" />
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {reviewStats.totalReviews} {reviewStats.totalReviews === 1 ? 'review' : 'reviews'}
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    {[5, 4, 3, 2, 1].map((star) => {
+                      const count = reviewStats.ratingDistribution[star as keyof typeof reviewStats.ratingDistribution];
+                      const percentage = reviewStats.totalReviews > 0 
+                        ? (count / reviewStats.totalReviews) * 100 
+                        : 0;
+                      return (
+                        <div key={star} className="flex items-center gap-2">
+                          <span className="text-sm w-8">{star}</span>
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <div className="flex-1 bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-yellow-400 h-2 rounded-full"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-sm text-muted-foreground w-12 text-right">
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {userReview && (
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Your Review</h3>
+                    {userReview.status === 'pending' && (
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                        Pending Moderation
+                      </span>
+                    )}
+                  </div>
+                  <ReviewForm
+                    productId={product._id || product.id || ''}
+                    existingReview={userReview}
+                    onSuccess={() => {
+                      // Refresh review data
+                      const productId = product._id || product.id
+                      if (productId) {
+                        reviewService.getUserReview(productId)
+                          .then(res => setUserReview(res.review))
+                          .catch(() => {})
+                        reviewService.getReviewStats(productId)
+                          .then(setReviewStats)
+                          .catch(() => {})
+                      }
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            <ReviewList
+              productId={product._id || product.id || ''}
+              onReviewSubmit={() => {
+                // Refresh review stats when a new review is submitted
+                const productId = product._id || product.id
+                if (productId) {
+                  reviewService.getReviewStats(productId)
+                    .then(setReviewStats)
+                    .catch(() => {})
+                }
+              }}
+            />
+          </TabsContent>
+
+          {isAuthenticated && !userReview && (
+            <TabsContent value="write-review" className="mt-6">
+              <Card>
+                <CardContent className="pt-6">
+                  <ReviewForm
+                    productId={product._id || product.id || ''}
+                    onSuccess={() => {
+                      // Refresh review data
+                      const productId = product._id || product.id
+                      if (productId) {
+                        reviewService.getUserReview(productId)
+                          .then(res => setUserReview(res.review))
+                          .catch(() => {})
+                        reviewService.getReviewStats(productId)
+                          .then(setReviewStats)
+                          .catch(() => {})
+                      }
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
 
       {/* Related Products Section */}
@@ -237,11 +481,7 @@ export default function ProductDetail() {
                     </CardContent>
                     <CardFooter className="flex flex-col items-start gap-2 p-4">
                       <h4 className="font-semibold text-lg line-clamp-2" title={relatedProduct.title}>{relatedProduct.title}</h4>
-                      <div className="flex items-center gap-1">
-                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                        <span className="text-sm font-medium">4.5</span>
-                        <span className="text-sm text-muted-foreground">(0)</span>
-                      </div>
+                      <RatingDisplay rating={4.5} totalReviews={0} showCount size="sm" />
                       <div className="flex items-center justify-between w-full">
                         <span className="text-xl font-bold">${relatedProduct.price}</span>
                       </div>

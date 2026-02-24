@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock } from 'lucide-react'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
 import * as orderService from '../../services/orderService'
+import * as reviewService from '../../services/reviewService'
+import RatingDisplay from '../../components/RatingDisplay'
 import { getFirstImageUrl } from '../../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
 
@@ -27,6 +29,8 @@ export default function AdminProfile() {
   const [productStats, setProductStats] = useState({ total: 0, pending: 0 })
   const [allOrders, setAllOrders] = useState<any[]>([])
   const [orderStats, setOrderStats] = useState<{ totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number } | null>(null)
+  const [allReviews, setAllReviews] = useState<any[]>([])
+  const [reviewsPagination, setReviewsPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
   const [loading, setLoading] = useState(true)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editingRole, setEditingRole] = useState<string>('')
@@ -35,6 +39,16 @@ export default function AdminProfile() {
     const response = await productService.getAllProducts({ page, limit: 10 })
     setAllProducts(response.products)
     setProductsPagination(response.pagination)
+  }
+
+  const fetchReviews = async (page = 1) => {
+    try {
+      const response = await reviewService.getPendingReviews({ page, limit: 10 })
+      setAllReviews(response.reviews)
+      setReviewsPagination(response.pagination)
+    } catch (error) {
+      console.error('Failed to fetch reviews:', error)
+    }
   }
 
   useEffect(() => {
@@ -54,6 +68,7 @@ export default function AdminProfile() {
         setProductsPagination(productsResponse.pagination)
         setAllOrders(ordersData.orders)
         setOrderStats(ordersData.statistics)
+        await fetchReviews(1)
       } catch (error) {
         console.error('Failed to fetch admin data:', error)
       } finally {
@@ -299,6 +314,15 @@ export default function AdminProfile() {
             {orderStats && orderStats.pendingOrders > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
                 {orderStats.pendingOrders}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="reviews" className="gap-2">
+            <Star className="h-4 w-4" />
+            Reviews
+            {allReviews.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
+                {allReviews.length}
               </span>
             )}
           </TabsTrigger>
@@ -896,6 +920,193 @@ export default function AdminProfile() {
                     size="sm"
                     disabled={ordersPagination.page >= ordersTotalPages}
                     onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reviews" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Review Moderation</CardTitle>
+              <CardDescription>Review and approve pending product reviews</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-muted-foreground">Loading reviews...</p>
+              ) : allReviews.length === 0 ? (
+                <p className="text-muted-foreground">No pending reviews</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
+                        <th className="px-4 py-3 text-left font-medium">Product</th>
+                        <th className="px-4 py-3 text-left font-medium">User</th>
+                        <th className="px-4 py-3 text-left font-medium">Rating</th>
+                        <th className="px-4 py-3 text-left font-medium">Comment</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-left font-medium">Created</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allReviews.map((review, index) => {
+                        const reviewId = review.id || review._id
+                        const product = review.productId as any
+                        const productTitle = typeof product === 'object' ? (product?.title || 'N/A') : 'N/A'
+                        const user = review.userId as any
+                        const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+                        const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
+                        const rowNo = (reviewsPagination.page - 1) * reviewsPagination.limit + index + 1
+
+                        return (
+                          <tr key={reviewId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                            <td className="px-4 py-3 font-medium max-w-[200px] truncate" title={productTitle}>
+                              {productTitle}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="font-medium">{userName}</p>
+                                <p className="text-xs text-muted-foreground">{userEmail}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <RatingDisplay rating={review.rating} size="sm" />
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground max-w-[300px] truncate" title={review.comment}>
+                              {review.comment || '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge
+                                variant={
+                                  review.status === 'approved' ? 'default' :
+                                  review.status === 'rejected' ? 'destructive' :
+                                  'secondary'
+                                }
+                                className="capitalize"
+                              >
+                                {review.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {new Date(review.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                {review.status !== 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      if (!reviewId) {
+                                        toast({
+                                          title: 'Error',
+                                          description: 'Invalid review ID',
+                                          variant: 'destructive',
+                                        })
+                                        return
+                                      }
+                                      try {
+                                        await reviewService.approveReview(reviewId)
+                                        toast({
+                                          title: 'Review Approved',
+                                          description: 'The review has been approved and is now visible to customers.',
+                                          variant: 'default',
+                                        })
+                                        // Refresh reviews list to remove approved review from pending list
+                                        await fetchReviews(reviewsPagination.page)
+                                      } catch (error: any) {
+                                        console.error('Failed to approve review:', error)
+                                        const errorMessage = error?.response?.data?.error || error?.message || 'Failed to approve review'
+                                        toast({
+                                          title: 'Approval Failed',
+                                          description: errorMessage,
+                                          variant: 'destructive',
+                                        })
+                                      }
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    Approve
+                                  </Button>
+                                )}
+                                {review.status !== 'rejected' && (
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={async () => {
+                                      if (!reviewId) {
+                                        toast({
+                                          title: 'Error',
+                                          description: 'Invalid review ID',
+                                          variant: 'destructive',
+                                        })
+                                        return
+                                      }
+                                      try {
+                                        await reviewService.rejectReview(reviewId)
+                                        toast({
+                                          title: 'Review Rejected',
+                                          description: 'The review has been rejected and will not be visible to customers.',
+                                          variant: 'default',
+                                        })
+                                        // Refresh reviews list to remove rejected review from pending list
+                                        await fetchReviews(reviewsPagination.page)
+                                      } catch (error: any) {
+                                        console.error('Failed to reject review:', error)
+                                        const errorMessage = error?.response?.data?.error || error?.message || 'Failed to reject review'
+                                        toast({
+                                          title: 'Rejection Failed',
+                                          description: errorMessage,
+                                          variant: 'destructive',
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    Reject
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {allReviews.length > 0 && reviewsPagination.pages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reviewsPagination.page <= 1}
+                    onClick={() => {
+                      const newPage = reviewsPagination.page - 1
+                      setReviewsPagination((p) => ({ ...p, page: newPage }))
+                      fetchReviews(newPage)
+                    }}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {reviewsPagination.page} of {reviewsPagination.pages} ({reviewsPagination.total} total)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reviewsPagination.page >= reviewsPagination.pages}
+                    onClick={() => {
+                      const newPage = reviewsPagination.page + 1
+                      setReviewsPagination((p) => ({ ...p, page: newPage }))
+                      fetchReviews(newPage)
+                    }}
                   >
                     Next
                   </Button>

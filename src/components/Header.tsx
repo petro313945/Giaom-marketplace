@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, User, Menu } from 'lucide-react'
+import { Search, User, Menu, Heart } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { Badge } from './ui/badge'
 import { useToast } from './ui/use-toast'
 import { useAuth } from '../context/AuthContext'
 import CartDrawer from './CartDrawer'
 import * as categoryService from '../services/categoryService'
+import * as wishlistService from '../services/wishlistService'
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [categories, setCategories] = useState<categoryService.Category[]>([])
+  const [wishlistCount, setWishlistCount] = useState(0)
   const { isAuthenticated, user, logout } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
@@ -28,6 +31,38 @@ export default function Header() {
     }
     fetchCategories()
   }, [])
+
+  useEffect(() => {
+    const fetchWishlistCount = async () => {
+      if (!isAuthenticated || user?.role !== 'customer') {
+        setWishlistCount(0)
+        return
+      }
+
+      try {
+        const response = await wishlistService.getWishlist()
+        setWishlistCount(response.wishlist.items.length)
+      } catch (error) {
+        console.error('Failed to fetch wishlist count:', error)
+      }
+    }
+
+    fetchWishlistCount()
+    
+    // Listen for wishlist changes from other components
+    const handleWishlistChange = () => {
+      fetchWishlistCount()
+    }
+    
+    window.addEventListener('wishlistChanged', handleWishlistChange)
+    
+    // Refresh count when user changes
+    const interval = setInterval(fetchWishlistCount, 30000) // Refresh every 30 seconds as fallback
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('wishlistChanged', handleWishlistChange)
+    }
+  }, [isAuthenticated, user])
 
   const handleLogout = () => {
     logout()
@@ -79,9 +114,21 @@ export default function Header() {
           {isAuthenticated && (
             <>
               {user?.role === 'customer' && (
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/become-seller">Become a Seller</Link>
-                </Button>
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/become-seller">Become a Seller</Link>
+                  </Button>
+                  <Button variant="ghost" size="icon" asChild className="relative">
+                    <Link to="/profile?tab=wishlist">
+                      <Heart className="h-5 w-5" />
+                      {wishlistCount > 0 && (
+                        <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                          {wishlistCount > 9 ? '9+' : wishlistCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </Button>
+                </>
               )}
               <CartDrawer />
               <Button variant="ghost" size="icon" asChild>
