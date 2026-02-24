@@ -13,6 +13,7 @@ import * as reviewService from '../services/reviewService'
 import RatingDisplay from '../components/RatingDisplay'
 import ReviewList from '../components/ReviewList'
 import ReviewForm from '../components/ReviewForm'
+import ReportDialog from '../components/ReportDialog'
 import { getImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
 import type { ReviewStats, Review } from '../services/reviewService'
@@ -339,6 +340,14 @@ export default function ProductDetail() {
             >
               <Heart className={`h-5 w-5 ${inWishlist ? 'fill-current' : ''}`} />
             </Button>
+          </div>
+          
+          <div className="flex justify-end">
+            <ReportDialog
+              reportedType="product"
+              reportedId={product._id || product.id}
+              reportedTitle={product.title}
+            />
           </div>
         </div>
       </div>

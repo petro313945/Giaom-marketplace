@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import RatingDisplay from './RatingDisplay';
+import ReportDialog from './ReportDialog';
 import * as reviewService from '../services/reviewService';
 import type { Review } from '../services/reviewService';
 import { useAuth } from '../context/AuthContext';
@@ -100,9 +101,16 @@ export default function ReviewList({
                       </div>
                       <RatingDisplay rating={review.rating} size="sm" />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(review.createdAt).toLocaleDateString()}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(review.createdAt).toLocaleDateString()}
+                      </p>
+                      <ReportDialog
+                        reportedType="review"
+                        reportedId={review.id || review._id || ''}
+                        reportedTitle={`Review by ${userName}`}
+                      />
+                    </div>
                   </div>
                   {review.comment && (
                     <p className="text-sm text-muted-foreground mt-2">
