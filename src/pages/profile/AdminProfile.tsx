@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -41,6 +42,8 @@ export default function AdminProfile() {
   const [resolvingReportId, setResolvingReportId] = useState<string | null>(null)
   const [dismissingReportId, setDismissingReportId] = useState<string | null>(null)
   const [reportAdminNotes, setReportAdminNotes] = useState<{ [key: string]: string }>({})
+  const [selectedReport, setSelectedReport] = useState<any | null>(null)
+  const [reportDialogOpen, setReportDialogOpen] = useState(false)
 
   const fetchProducts = async (page = 1) => {
     const response = await productService.getAllProducts({ page, limit: 10 })
@@ -1191,208 +1194,182 @@ export default function AdminProfile() {
                   <p className="text-sm text-muted-foreground mt-1">Reports will appear here when users submit them</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {allReports.map((report) => {
-                    const reportId = report.id || report._id
-                    const reporter = report.reporterId as any
-                    const reporterEmail = typeof reporter === 'object' ? (reporter?.email || 'N/A') : 'N/A'
-                    const reporterName = typeof reporter === 'object' ? (reporter?.fullName || reporterEmail) : reporterEmail
-                    const isResolving = resolvingReportId === reportId
-                    const isDismissing = dismissingReportId === reportId
-                    const isPending = report.status === 'pending'
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="h-12 px-4 text-left font-medium w-14">No.</th>
+                        <th className="h-12 px-4 text-left font-medium">Report ID</th>
+                        <th className="h-12 px-4 text-left font-medium">Type</th>
+                        <th className="h-12 px-4 text-left font-medium">Reporter</th>
+                        <th className="h-12 px-4 text-left font-medium">Reason</th>
+                        <th className="h-12 px-4 text-left font-medium">Status</th>
+                        <th className="h-12 px-4 text-left font-medium">Reported Content</th>
+                        <th className="h-12 px-4 text-left font-medium">Date</th>
+                        <th className="h-12 px-4 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allReports.map((report, index) => {
+                        const reportId = report.id || report._id
+                        const reporter = report.reporterId as any
+                        const reporterEmail = typeof reporter === 'object' ? (reporter?.email || 'N/A') : 'N/A'
+                        const reporterName = typeof reporter === 'object' ? (reporter?.fullName || reporterEmail) : reporterEmail
+                        const isResolving = resolvingReportId === reportId
+                        const isDismissing = dismissingReportId === reportId
+                        const isPending = report.status === 'pending'
+                        const limit = reportsPagination.limit || 10
+                        const rowNo = ((reportsPagination.page - 1) * limit) + index + 1
 
-                    return (
-                      <Card key={reportId} className="border-l-4 border-l-primary">
-                        <CardHeader>
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <CardTitle className="text-lg">
-                                  Report #{reportId.slice(-8)}
-                                </CardTitle>
-                                <Badge
-                                  variant={
-                                    report.status === 'resolved' ? 'default' :
-                                    report.status === 'dismissed' ? 'secondary' :
-                                    'destructive'
-                                  }
-                                  className="capitalize"
-                                >
-                                  {report.status}
-                                </Badge>
-                                <Badge variant="outline" className="capitalize">
-                                  {report.reportedType}
-                                </Badge>
-                              </div>
-                              <CardDescription>
-                                Reported by {reporterName} ({reporterEmail}) on{' '}
-                                {new Date(report.createdAt).toLocaleDateString()} at{' '}
-                                {new Date(report.createdAt).toLocaleTimeString()}
-                              </CardDescription>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div>
-                            <p className="text-sm font-medium mb-1">Reason:</p>
-                            <p className="text-sm text-muted-foreground">{report.reason}</p>
-                          </div>
-                          {report.description && (
-                            <div>
-                              <p className="text-sm font-medium mb-1">Description:</p>
-                              <p className="text-sm text-muted-foreground">{report.description}</p>
-                            </div>
-                          )}
-                          
-                          {/* Reported Content Preview */}
-                          <div className="border-t pt-4">
-                            <p className="text-sm font-medium mb-2">Reported Content:</p>
-                            {report.reportedContent ? (
-                              <div className="bg-muted/50 p-3 rounded-lg">
-                                {report.reportedType === 'product' && (
-                                  <div className="flex items-start gap-3">
-                                    {report.reportedContent.imageUrl || (report.reportedContent.imageUrls && report.reportedContent.imageUrls[0]) ? (
-                                      <img
-                                        src={report.reportedContent.imageUrl || report.reportedContent.imageUrls[0]}
-                                        alt={report.reportedContent.title}
-                                        className="h-16 w-16 rounded object-cover"
-                                      />
-                                    ) : null}
-                                    <div className="flex-1">
-                                      <p className="font-medium">{report.reportedContent.title}</p>
-                                      <p className="text-sm text-muted-foreground">${report.reportedContent.price?.toFixed(2)}</p>
-                                      <p className="text-xs text-muted-foreground">Category: {report.reportedContent.category}</p>
-                                    </div>
-                                  </div>
-                                )}
-                                {report.reportedType === 'user' && (
-                                  <div>
-                                    <p className="font-medium">{report.reportedContent.fullName || 'N/A'}</p>
-                                    <p className="text-sm text-muted-foreground">{report.reportedContent.email}</p>
-                                    <p className="text-xs text-muted-foreground">Role: {report.reportedContent.role}</p>
-                                  </div>
-                                )}
-                                {report.reportedType === 'review' && (
-                                  <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <RatingDisplay rating={report.reportedContent.rating} size="sm" />
-                                      <span className="text-xs text-muted-foreground">
-                                        by {typeof report.reportedContent.userId === 'object' 
-                                          ? (report.reportedContent.userId?.fullName || report.reportedContent.userId?.email || 'N/A')
-                                          : 'N/A'}
-                                      </span>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">{report.reportedContent.comment || 'No comment'}</p>
-                                    {typeof report.reportedContent.productId === 'object' && (
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        Product: {report.reportedContent.productId?.title || 'N/A'}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground italic">Content has been deleted</p>
-                            )}
-                          </div>
+                        // Get reported content summary
+                        let contentSummary = 'N/A'
+                        if (report.reportedContent) {
+                          if (report.reportedType === 'product') {
+                            contentSummary = report.reportedContent.title || 'N/A'
+                          } else if (report.reportedType === 'user') {
+                            contentSummary = report.reportedContent.fullName || report.reportedContent.email || 'N/A'
+                          } else if (report.reportedType === 'review') {
+                            contentSummary = report.reportedContent.comment 
+                              ? (report.reportedContent.comment.substring(0, 50) + (report.reportedContent.comment.length > 50 ? '...' : ''))
+                              : 'No comment'
+                          }
+                        } else {
+                          contentSummary = 'Deleted'
+                        }
 
-                          {report.adminNotes && (
-                            <div className="border-t pt-4">
-                              <p className="text-sm font-medium mb-1">Admin Notes:</p>
-                              <p className="text-sm text-muted-foreground">{report.adminNotes}</p>
-                              {report.resolvedBy && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Resolved by {typeof report.resolvedBy === 'object' 
-                                    ? (report.resolvedBy?.fullName || report.resolvedBy?.email || 'N/A')
-                                    : 'N/A'} on {report.resolvedAt ? new Date(report.resolvedAt).toLocaleDateString() : 'N/A'}
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {isPending && (
-                            <div className="border-t pt-4 space-y-2">
-                              <div>
-                                <p className="text-sm font-medium mb-2">Admin Notes (optional):</p>
-                                <textarea
-                                  className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md"
-                                  placeholder="Add notes about this report..."
-                                  value={reportAdminNotes[reportId] || ''}
-                                  onChange={(e) => setReportAdminNotes({ ...reportAdminNotes, [reportId]: e.target.value })}
-                                />
+                        return (
+                          <tr key={reportId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                            <td className="h-16 px-4 align-middle font-medium">{rowNo}</td>
+                            <td className="h-16 px-4 align-middle">
+                              <span className="font-mono text-xs">#{reportId.slice(-8)}</span>
+                            </td>
+                            <td className="h-16 px-4 align-middle">
+                              <Badge variant="outline" className="capitalize">
+                                {report.reportedType}
+                              </Badge>
+                            </td>
+                            <td className="h-16 px-4 align-middle">
+                              <div className="flex flex-col">
+                                <span className="font-medium">{reporterName}</span>
+                                <span className="text-xs text-muted-foreground">{reporterEmail}</span>
                               </div>
-                              <div className="flex gap-2">
+                            </td>
+                            <td className="h-16 px-4 align-middle">
+                              <p className="max-w-[150px] truncate" title={report.reason}>
+                                {report.reason}
+                              </p>
+                            </td>
+                            <td className="h-16 px-4 align-middle">
+                              <Badge
+                                variant={
+                                  report.status === 'resolved' ? 'default' :
+                                  report.status === 'dismissed' ? 'secondary' :
+                                  'destructive'
+                                }
+                                className="capitalize"
+                              >
+                                {report.status}
+                              </Badge>
+                            </td>
+                            <td className="h-16 px-4 align-middle">
+                              <p className="max-w-[150px] truncate" title={contentSummary}>
+                                {contentSummary}
+                              </p>
+                            </td>
+                            <td className="h-16 px-4 align-middle">
+                              <div className="flex flex-col">
+                                <span className="text-xs">{new Date(report.createdAt).toLocaleDateString()}</span>
+                                <span className="text-xs text-muted-foreground">{new Date(report.createdAt).toLocaleTimeString()}</span>
+                              </div>
+                            </td>
+                            <td className="h-16 px-4 align-middle text-right">
+                              <div className="flex gap-2 justify-end">
                                 <Button
+                                  variant="outline"
                                   size="sm"
-                                  onClick={async () => {
-                                    setResolvingReportId(reportId)
-                                    try {
-                                      await reportService.resolveReport(reportId, {
-                                        adminNotes: reportAdminNotes[reportId] || undefined
-                                      })
-                                      toast({
-                                        title: 'Report Resolved',
-                                        description: 'The report has been marked as resolved.',
-                                        variant: 'default',
-                                      })
-                                      await fetchReports(reportsPagination.page)
-                                      await fetchPendingReportsCount()
-                                      setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
-                                    } catch (error: any) {
-                                      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to resolve report'
-                                      toast({
-                                        title: 'Resolution Failed',
-                                        description: errorMessage,
-                                        variant: 'destructive',
-                                      })
-                                    } finally {
-                                      setResolvingReportId(null)
-                                    }
+                                  onClick={() => {
+                                    setSelectedReport(report)
+                                    setReportDialogOpen(true)
                                   }}
-                                  disabled={isResolving || isDismissing}
-                                  className="bg-green-600 hover:bg-green-700"
                                 >
-                                  {isResolving ? 'Resolving...' : 'Resolve'}
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={async () => {
-                                    setDismissingReportId(reportId)
-                                    try {
-                                      await reportService.dismissReport(reportId, {
-                                        adminNotes: reportAdminNotes[reportId] || undefined
-                                      })
-                                      toast({
-                                        title: 'Report Dismissed',
-                                        description: 'The report has been dismissed.',
-                                        variant: 'default',
-                                      })
-                                      await fetchReports(reportsPagination.page)
-                                      await fetchPendingReportsCount()
-                                      setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
-                                    } catch (error: any) {
-                                      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to dismiss report'
-                                      toast({
-                                        title: 'Dismissal Failed',
-                                        description: errorMessage,
-                                        variant: 'destructive',
-                                      })
-                                    } finally {
-                                      setDismissingReportId(null)
-                                    }
-                                  }}
-                                  disabled={isResolving || isDismissing}
-                                >
-                                  {isDismissing ? 'Dismissing...' : 'Dismiss'}
-                                </Button>
+                                {isPending && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      onClick={async () => {
+                                        setResolvingReportId(reportId)
+                                        try {
+                                          await reportService.resolveReport(reportId, {
+                                            adminNotes: reportAdminNotes[reportId] || undefined
+                                          })
+                                          toast({
+                                            title: 'Report Resolved',
+                                            description: 'The report has been marked as resolved.',
+                                            variant: 'default',
+                                          })
+                                          await fetchReports(reportsPagination.page)
+                                          await fetchPendingReportsCount()
+                                          setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
+                                        } catch (error: any) {
+                                          const errorMessage = error?.response?.data?.error || error?.message || 'Failed to resolve report'
+                                          toast({
+                                            title: 'Resolution Failed',
+                                            description: errorMessage,
+                                            variant: 'destructive',
+                                          })
+                                        } finally {
+                                          setResolvingReportId(null)
+                                        }
+                                      }}
+                                      disabled={isResolving || isDismissing}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      {isResolving ? '...' : 'Resolve'}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={async () => {
+                                        setDismissingReportId(reportId)
+                                        try {
+                                          await reportService.dismissReport(reportId, {
+                                            adminNotes: reportAdminNotes[reportId] || undefined
+                                          })
+                                          toast({
+                                            title: 'Report Dismissed',
+                                            description: 'The report has been dismissed.',
+                                            variant: 'default',
+                                          })
+                                          await fetchReports(reportsPagination.page)
+                                          await fetchPendingReportsCount()
+                                          setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
+                                        } catch (error: any) {
+                                          const errorMessage = error?.response?.data?.error || error?.message || 'Failed to dismiss report'
+                                          toast({
+                                            title: 'Dismissal Failed',
+                                            description: errorMessage,
+                                            variant: 'destructive',
+                                          })
+                                        } finally {
+                                          setDismissingReportId(null)
+                                        }
+                                      }}
+                                      disabled={isResolving || isDismissing}
+                                    >
+                                      {isDismissing ? '...' : 'Dismiss'}
+                                    </Button>
+                                  </>
+                                )}
                               </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
               {allReports.length > 0 && reportsPagination.pages > 1 && (
@@ -1428,6 +1405,222 @@ export default function AdminProfile() {
               )}
             </CardContent>
           </Card>
+
+          {/* Report Details Dialog */}
+          <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              {selectedReport && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>
+                      Report #{selectedReport.id?.slice(-8) || selectedReport._id?.slice(-8)}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Detailed information about this report
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          selectedReport.status === 'resolved' ? 'default' :
+                          selectedReport.status === 'dismissed' ? 'secondary' :
+                          'destructive'
+                        }
+                        className="capitalize"
+                      >
+                        {selectedReport.status}
+                      </Badge>
+                      <Badge variant="outline" className="capitalize">
+                        {selectedReport.reportedType}
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium mb-1">Reporter:</p>
+                      <p className="text-sm text-muted-foreground">
+                        {typeof selectedReport.reporterId === 'object' 
+                          ? `${selectedReport.reporterId?.fullName || 'N/A'} (${selectedReport.reporterId?.email || 'N/A'})`
+                          : 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium mb-1">Date:</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(selectedReport.createdAt).toLocaleDateString()} at{' '}
+                        {new Date(selectedReport.createdAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium mb-1">Reason:</p>
+                      <p className="text-sm text-muted-foreground">{selectedReport.reason}</p>
+                    </div>
+
+                    {selectedReport.description && (
+                      <div>
+                        <p className="text-sm font-medium mb-1">Description:</p>
+                        <p className="text-sm text-muted-foreground">{selectedReport.description}</p>
+                      </div>
+                    )}
+
+                    <div className="border-t pt-4">
+                      <p className="text-sm font-medium mb-2">Reported Content:</p>
+                      {selectedReport.reportedContent ? (
+                        <div className="bg-muted/50 p-3 rounded-lg">
+                          {selectedReport.reportedType === 'product' && (
+                            <div className="flex items-start gap-3">
+                              {selectedReport.reportedContent.imageUrl || (selectedReport.reportedContent.imageUrls && selectedReport.reportedContent.imageUrls[0]) ? (
+                                <img
+                                  src={selectedReport.reportedContent.imageUrl || selectedReport.reportedContent.imageUrls[0]}
+                                  alt={selectedReport.reportedContent.title}
+                                  className="h-16 w-16 rounded object-cover"
+                                />
+                              ) : null}
+                              <div className="flex-1">
+                                <p className="font-medium">{selectedReport.reportedContent.title}</p>
+                                <p className="text-sm text-muted-foreground">${selectedReport.reportedContent.price?.toFixed(2)}</p>
+                                <p className="text-xs text-muted-foreground">Category: {selectedReport.reportedContent.category}</p>
+                              </div>
+                            </div>
+                          )}
+                          {selectedReport.reportedType === 'user' && (
+                            <div>
+                              <p className="font-medium">{selectedReport.reportedContent.fullName || 'N/A'}</p>
+                              <p className="text-sm text-muted-foreground">{selectedReport.reportedContent.email}</p>
+                              <p className="text-xs text-muted-foreground">Role: {selectedReport.reportedContent.role}</p>
+                            </div>
+                          )}
+                          {selectedReport.reportedType === 'review' && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <RatingDisplay rating={selectedReport.reportedContent.rating} size="sm" />
+                                <span className="text-xs text-muted-foreground">
+                                  by {typeof selectedReport.reportedContent.userId === 'object' 
+                                    ? (selectedReport.reportedContent.userId?.fullName || selectedReport.reportedContent.userId?.email || 'N/A')
+                                    : 'N/A'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{selectedReport.reportedContent.comment || 'No comment'}</p>
+                              {typeof selectedReport.reportedContent.productId === 'object' && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Product: {selectedReport.reportedContent.productId?.title || 'N/A'}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">Content has been deleted</p>
+                      )}
+                    </div>
+
+                    {selectedReport.adminNotes && (
+                      <div className="border-t pt-4">
+                        <p className="text-sm font-medium mb-1">Admin Notes:</p>
+                        <p className="text-sm text-muted-foreground">{selectedReport.adminNotes}</p>
+                        {selectedReport.resolvedBy && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Resolved by {typeof selectedReport.resolvedBy === 'object' 
+                              ? (selectedReport.resolvedBy?.fullName || selectedReport.resolvedBy?.email || 'N/A')
+                              : 'N/A'} on {selectedReport.resolvedAt ? new Date(selectedReport.resolvedAt).toLocaleDateString() : 'N/A'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedReport.status === 'pending' && (
+                      <div className="border-t pt-4 space-y-2">
+                        <div>
+                          <p className="text-sm font-medium mb-2">Admin Notes (optional):</p>
+                          <textarea
+                            className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md"
+                            placeholder="Add notes about this report..."
+                            value={reportAdminNotes[selectedReport.id || selectedReport._id] || ''}
+                            onChange={(e) => setReportAdminNotes({ 
+                              ...reportAdminNotes, 
+                              [selectedReport.id || selectedReport._id]: e.target.value 
+                            })}
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              const reportId = selectedReport.id || selectedReport._id
+                              setResolvingReportId(reportId)
+                              try {
+                                await reportService.resolveReport(reportId, {
+                                  adminNotes: reportAdminNotes[reportId] || undefined
+                                })
+                                toast({
+                                  title: 'Report Resolved',
+                                  description: 'The report has been marked as resolved.',
+                                  variant: 'default',
+                                })
+                                await fetchReports(reportsPagination.page)
+                                await fetchPendingReportsCount()
+                                setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
+                                setReportDialogOpen(false)
+                              } catch (error: any) {
+                                const errorMessage = error?.response?.data?.error || error?.message || 'Failed to resolve report'
+                                toast({
+                                  title: 'Resolution Failed',
+                                  description: errorMessage,
+                                  variant: 'destructive',
+                                })
+                              } finally {
+                                setResolvingReportId(null)
+                              }
+                            }}
+                            disabled={resolvingReportId === (selectedReport.id || selectedReport._id) || dismissingReportId === (selectedReport.id || selectedReport._id)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            {resolvingReportId === (selectedReport.id || selectedReport._id) ? 'Resolving...' : 'Resolve'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              const reportId = selectedReport.id || selectedReport._id
+                              setDismissingReportId(reportId)
+                              try {
+                                await reportService.dismissReport(reportId, {
+                                  adminNotes: reportAdminNotes[reportId] || undefined
+                                })
+                                toast({
+                                  title: 'Report Dismissed',
+                                  description: 'The report has been dismissed.',
+                                  variant: 'default',
+                                })
+                                await fetchReports(reportsPagination.page)
+                                await fetchPendingReportsCount()
+                                setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
+                                setReportDialogOpen(false)
+                              } catch (error: any) {
+                                const errorMessage = error?.response?.data?.error || error?.message || 'Failed to dismiss report'
+                                toast({
+                                  title: 'Dismissal Failed',
+                                  description: errorMessage,
+                                  variant: 'destructive',
+                                })
+                              } finally {
+                                setDismissingReportId(null)
+                              }
+                            }}
+                            disabled={resolvingReportId === (selectedReport.id || selectedReport._id) || dismissingReportId === (selectedReport.id || selectedReport._id)}
+                          >
+                            {dismissingReportId === (selectedReport.id || selectedReport._id) ? 'Dismissing...' : 'Dismiss'}
+                          </Button>
+                        </DialogFooter>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>
