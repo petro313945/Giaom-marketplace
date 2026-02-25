@@ -19,6 +19,7 @@ import ProductRating from '../components/ProductRating'
 import ReviewList from '../components/ReviewList'
 import ReviewForm from '../components/ReviewForm'
 import ReportDialog from '../components/ReportDialog'
+import ImageZoom from '../components/ImageZoom'
 import { getImageUrl } from '../utils/imageUtils'
 import type { Product } from '../services/productService'
 import type { ReviewStats, Review } from '../services/reviewService'
@@ -465,16 +466,19 @@ export default function ProductDetail() {
           )}
           
           {/* Main Image (Right of thumbnails) */}
-          <div className="relative flex-1 min-w-0 bg-muted rounded-lg overflow-hidden border">
-            <img
-              src={getImageUrl(
-                (product.imageUrls && product.imageUrls.length > 0) 
-                  ? product.imageUrls[selectedImageIndex] 
-                  : product.imageUrl
-              )}
-              alt={product.title}
-              className="w-full aspect-[4/5] object-contain main-product-image"
-            />
+          <div className="relative flex-1 min-w-0 bg-muted rounded-lg border overflow-visible">
+            <div className="overflow-hidden rounded-lg">
+              <ImageZoom
+                src={getImageUrl(
+                  (product.imageUrls && product.imageUrls.length > 0) 
+                    ? product.imageUrls[selectedImageIndex] 
+                    : product.imageUrl
+                )}
+                alt={product.title}
+                className="w-full aspect-[4/5] main-product-image"
+                zoomLevel={3}
+              />
+            </div>
           </div>
         </div>
         <div className="space-y-6">
