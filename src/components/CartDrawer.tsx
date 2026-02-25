@@ -1,12 +1,25 @@
+import { useState } from 'react'
 import { useCart } from '../context/CartContext'
 import { Button } from './ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet'
 import { ShoppingCart, Minus, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getImageUrl } from '../utils/imageUtils'
+import { useToast } from '@/components/ui/use-toast'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function CartDrawer() {
   const { cart, removeItem, updateItem, clearCart, itemCount, loading } = useCart()
+  const { toast } = useToast()
+  const [clearCartDialogOpen, setClearCartDialogOpen] = useState(false)
 
   const calculateTotal = () => {
     if (!cart || !cart.items) return 0
@@ -72,7 +85,11 @@ export default function CartDrawer() {
                               try {
                                 await updateItem(item.id || '', item.quantity - 1)
                               } catch (error: any) {
-                                alert(error?.message || 'Failed to update cart')
+                                toast({
+                                  title: 'Error',
+                                  description: error?.message || 'Failed to update cart',
+                                  variant: 'destructive',
+                                })
                               }
                             }}
                           >
@@ -87,7 +104,11 @@ export default function CartDrawer() {
                               try {
                                 await updateItem(item.id || '', item.quantity + 1)
                               } catch (error: any) {
-                                alert(error?.message || 'Failed to update cart')
+                                toast({
+                                  title: 'Error',
+                                  description: error?.message || 'Failed to update cart',
+                                  variant: 'destructive',
+                                })
                               }
                             }}
                           >
@@ -101,7 +122,11 @@ export default function CartDrawer() {
                               try {
                                 await removeItem(item.id || '')
                               } catch (error: any) {
-                                alert(error?.message || 'Failed to remove item')
+                                toast({
+                                  title: 'Error',
+                                  description: error?.message || 'Failed to remove item',
+                                  variant: 'destructive',
+                                })
                               }
                             }}
                           >
@@ -124,15 +149,7 @@ export default function CartDrawer() {
                 <Button 
                   variant="outline" 
                   className="w-full" 
-                  onClick={async () => {
-                    if (confirm('Are you sure you want to clear your cart?')) {
-                      try {
-                        await clearCart()
-                      } catch (error: any) {
-                        alert(error?.message || 'Failed to clear cart')
-                      }
-                    }
-                  }}
+                  onClick={() => setClearCartDialogOpen(true)}
                 >
                   Clear Cart
                 </Button>
@@ -141,6 +158,41 @@ export default function CartDrawer() {
           )}
         </div>
       </SheetContent>
+      <AlertDialog open={clearCartDialogOpen} onOpenChange={setClearCartDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Cart</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to clear your cart? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await clearCart()
+                  setClearCartDialogOpen(false)
+                  toast({
+                    title: 'Success',
+                    description: 'Cart cleared successfully',
+                    variant: 'default',
+                  })
+                } catch (error: any) {
+                  toast({
+                    title: 'Error',
+                    description: error?.message || 'Failed to clear cart',
+                    variant: 'destructive',
+                  })
+                }
+              }}
+            >
+              Clear Cart
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   )
 }

@@ -5,7 +5,7 @@ import type { Cart, CartItem } from '../services/cartService';
 interface CartContextType {
   cart: Cart | null;
   loading: boolean;
-  addItem: (productId: string, quantity?: number) => Promise<void>;
+  addItem: (productId: string, quantity?: number, variant?: { size?: string; color?: string }) => Promise<void>;
   updateItem: (itemId: string, quantity: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -86,12 +86,12 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const addItem = async (productId: string, quantity: number = 1) => {
+  const addItem = async (productId: string, quantity: number = 1, variant?: { size?: string; color?: string }) => {
     if (!checkAuth()) {
       throw new Error('Please log in to add items to cart');
     }
     try {
-      const response = await cartService.addToCart(productId, quantity);
+      const response = await cartService.addToCart(productId, quantity, variant);
       setCart(response.cart);
     } catch (error) {
       console.error('Failed to add item to cart:', error);

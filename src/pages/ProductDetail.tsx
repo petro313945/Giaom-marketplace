@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Star, ShoppingCart, ArrowLeft, Heart } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
@@ -36,6 +38,7 @@ export default function ProductDetail() {
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
   const [userReview, setUserReview] = useState<Review | null>(null)
   const [loadingReviewStats, setLoadingReviewStats] = useState(false)
+  const [selectedVariant, setSelectedVariant] = useState<{ size?: string; color?: string } | null>(null)
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -145,14 +148,27 @@ export default function ProductDetail() {
       navigate('/auth/login')
       return
     }
+
+    // If product has variants, require variant selection
+    if (product.variants && product.variants.length > 0 && !selectedVariant) {
+      toast({
+        title: 'Variant Required',
+        description: 'Please select a variant (size/color) before adding to cart.',
+        variant: 'destructive',
+      })
+      return
+    }
     
     try {
       const productId = product._id || product.id
-      await addItem(productId, 1)
+      await addItem(productId, 1, selectedVariant || undefined)
       setAdded(true)
+      const variantLabel = selectedVariant 
+        ? ` (${[selectedVariant.size, selectedVariant.color].filter(Boolean).join(' / ')})`
+        : ''
       toast({
         title: 'Added to Cart',
-        description: `${product.title} has been added to your cart.`,
+        description: `${product.title}${variantLabel} has been added to your cart.`,
         variant: 'default',
       })
       setTimeout(() => setAdded(false), 2000)
@@ -170,6 +186,36 @@ export default function ProductDetail() {
         setTimeout(() => navigate('/auth/login'), 1500)
       }
     }
+  }
+
+  // Get available stock for selected variant or product
+  const getAvailableStock = () => {
+    if (!product) return 0
+    if (selectedVariant && product.variants && product.variants.length > 0) {
+      const matchingVariant = product.variants.find(v => {
+        const sizeMatch = !selectedVariant.size || v.size === selectedVariant.size
+        const colorMatch = !selectedVariant.color || v.color === selectedVariant.color
+        return sizeMatch && colorMatch
+      })
+      return matchingVariant?.stock || 0
+    }
+    return product.stockQuantity || 0
+  }
+
+  // Get price for selected variant or product
+  const getDisplayPrice = () => {
+    if (!product) return 0
+    if (selectedVariant && product.variants && product.variants.length > 0) {
+      const matchingVariant = product.variants.find(v => {
+        const sizeMatch = !selectedVariant.size || v.size === selectedVariant.size
+        const colorMatch = !selectedVariant.color || v.color === selectedVariant.color
+        return sizeMatch && colorMatch
+      })
+      if (matchingVariant && matchingVariant.price !== undefined) {
+        return matchingVariant.price
+      }
+    }
+    return product.price
   }
 
   const handleToggleWishlist = async () => {
@@ -306,7 +352,79 @@ export default function ProductDetail() {
                 </div>
               )}
             </div>
-            <p className="text-3xl font-bold">${product.price}</p>
+            <p className="text-3xl font-bold">${getDisplayPrice()}</p>
+          </div>
+
+          {/* Variant Selector */}
+          {product.variants && product.variants.length > 0 && (
+            <div className="space-y-4">
+              {/* Size Selector */}
+              {product.variants.some(v => v.size) && (
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Size</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(new Set(
+                      product.variants
+                        .filter(v => v.size)
+                        .map(v => v.size)
+                        .filter((size): size is string => !!size)
+                    )).map(size => (
+                      <Button
+                        key={size}
+                        type="button"
+                        variant={selectedVariant?.size === size ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedVariant({ ...selectedVariant, size })}
+                      >
+                        {size}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Color Selector */}
+              {product.variants.some(v => v.color) && (
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Color</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(new Set(
+                      product.variants
+                        .filter(v => v.color)
+                        .map(v => v.color)
+                        .filter((color): color is string => !!color)
+                    )).map(color => (
+                      <Button
+                        key={color}
+                        type="button"
+                        variant={selectedVariant?.color === color ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedVariant({ ...selectedVariant, color })}
+                      >
+                        {color}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">Stock Status</p>
+            {getAvailableStock() === 0 ? (
+              <Badge variant="destructive" className="text-sm">
+                Out of Stock
+              </Badge>
+            ) : getAvailableStock() < 10 ? (
+              <Badge variant="secondary" className="text-sm">
+                Only {getAvailableStock()} left in stock
+              </Badge>
+            ) : (
+              <Badge variant="default" className="text-sm">
+                In Stock ({getAvailableStock()} available)
+              </Badge>
+            )}
           </div>
 
           {product.description && (
@@ -326,10 +444,14 @@ export default function ProductDetail() {
               size="lg" 
               className="flex-1" 
               onClick={handleAddToCart} 
-              disabled={added}
+              disabled={added || getAvailableStock() === 0}
             >
               <ShoppingCart className="mr-2 h-5 w-5" />
-              {added ? "Added to Cart!" : "Add to Cart"}
+              {getAvailableStock() === 0 
+                ? "Out of Stock" 
+                : added 
+                  ? "Added to Cart!" 
+                  : "Add to Cart"}
             </Button>
             <Button
               size="lg"

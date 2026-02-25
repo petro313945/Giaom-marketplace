@@ -2,9 +2,20 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Package, Truck, CheckCircle, XCircle } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { ArrowLeft, Package, Truck, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '@/components/ui/use-toast'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import * as orderService from '../services/orderService'
 import { getImageUrl } from '../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../utils/orderStatusUtils'
@@ -14,10 +25,16 @@ export default function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { toast } = useToast()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [updatingTracking, setUpdatingTracking] = useState(false)
+  const [showTrackingForm, setShowTrackingForm] = useState(false)
+  const [trackingNumber, setTrackingNumber] = useState('')
+  const [carrier, setCarrier] = useState('')
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -27,6 +44,8 @@ export default function OrderDetail() {
         setError(null)
         const response = await orderService.getOrderById(id)
         setOrder(response.order)
+        setTrackingNumber(response.order.trackingNumber || '')
+        setCarrier(response.order.carrier || '')
       } catch (error: any) {
         setError(error?.response?.data?.error || 'Failed to load order')
       } finally {
@@ -44,11 +63,67 @@ export default function OrderDetail() {
       setUpdating(true)
       await orderService.updateOrderStatus(id, newStatus as any)
       setOrder({ ...order, status: newStatus as any })
+      toast({
+        title: 'Success',
+        description: 'Order status updated successfully',
+        variant: 'default',
+      })
     } catch (error: any) {
-      alert(error?.response?.data?.error || 'Failed to update order status')
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || 'Failed to update order status',
+        variant: 'destructive',
+      })
     } finally {
       setUpdating(false)
     }
+  }
+
+  const handleTrackingUpdate = async () => {
+    if (!id || !order || !trackingNumber.trim()) return
+
+    try {
+      setUpdatingTracking(true)
+      const response = await orderService.updateTrackingNumber(id, trackingNumber.trim(), carrier.trim() || undefined)
+      setOrder({ ...order, trackingNumber: response.order.trackingNumber, carrier: response.order.carrier, status: response.order.status })
+      setShowTrackingForm(false)
+      toast({
+        title: 'Success',
+        description: 'Tracking number updated successfully',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || 'Failed to update tracking number',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingTracking(false)
+    }
+  }
+
+  const getTrackingLink = (trackingNum: string, carrierName?: string) => {
+    if (!carrierName) return null
+    
+    const carrierLower = carrierName.toLowerCase()
+    const tracking = encodeURIComponent(trackingNum)
+    
+    // Common carrier tracking URLs
+    if (carrierLower.includes('ups') || carrierLower.includes('united parcel')) {
+      return `https://www.ups.com/track?tracknum=${tracking}`
+    } else if (carrierLower.includes('fedex') || carrierLower.includes('federal express')) {
+      return `https://www.fedex.com/fedextrack/?trknbr=${tracking}`
+    } else if (carrierLower.includes('usps') || carrierLower.includes('united states postal')) {
+      return `https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=${tracking}`
+    } else if (carrierLower.includes('dhl')) {
+      return `https://www.dhl.com/en/express/tracking.html?AWB=${tracking}`
+    } else if (carrierLower.includes('usps')) {
+      return `https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=${tracking}`
+    }
+    
+    // Generic search as fallback
+    return `https://www.google.com/search?q=track+${tracking}+${encodeURIComponent(carrierName)}`
   }
 
   const getStatusIcon = (status: string) => {
@@ -262,6 +337,105 @@ export default function OrderDetail() {
                 </div>
               </div>
 
+              {/* Tracking Information */}
+              {(order.trackingNumber || canUpdateStatus) && (
+                <div className="border-t pt-4 space-y-3">
+                  <p className="text-sm font-medium">Tracking Information</p>
+                  {order.trackingNumber ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">Tracking Number</p>
+                          <p className="text-sm text-muted-foreground font-mono">{order.trackingNumber}</p>
+                        </div>
+                        {getTrackingLink(order.trackingNumber, order.carrier) && (
+                          <a
+                            href={getTrackingLink(order.trackingNumber, order.carrier)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1 text-sm"
+                          >
+                            Track <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                      {order.carrier && (
+                        <div>
+                          <p className="text-sm font-medium">Carrier</p>
+                          <p className="text-sm text-muted-foreground">{order.carrier}</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No tracking number available</p>
+                  )}
+                  
+                  {canUpdateStatus && (
+                    <div className="space-y-2">
+                      {!showTrackingForm ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => {
+                            setShowTrackingForm(true)
+                            setTrackingNumber(order.trackingNumber || '')
+                            setCarrier(order.carrier || '')
+                          }}
+                        >
+                          {order.trackingNumber ? 'Update Tracking' : 'Add Tracking Number'}
+                        </Button>
+                      ) : (
+                        <div className="space-y-2 p-3 border rounded-md bg-muted/50">
+                          <div>
+                            <Label htmlFor="trackingNumber">Tracking Number *</Label>
+                            <Input
+                              id="trackingNumber"
+                              value={trackingNumber}
+                              onChange={(e) => setTrackingNumber(e.target.value)}
+                              placeholder="Enter tracking number"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="carrier">Carrier (Optional)</Label>
+                            <Input
+                              id="carrier"
+                              value={carrier}
+                              onChange={(e) => setCarrier(e.target.value)}
+                              placeholder="e.g., UPS, FedEx, USPS"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleTrackingUpdate}
+                              disabled={updatingTracking || !trackingNumber.trim()}
+                              className="flex-1"
+                            >
+                              {updatingTracking ? 'Updating...' : 'Save'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setShowTrackingForm(false)
+                                setTrackingNumber(order.trackingNumber || '')
+                                setCarrier(order.carrier || '')
+                              }}
+                              disabled={updatingTracking}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
@@ -282,11 +456,7 @@ export default function OrderDetail() {
                   <Button
                     variant="destructive"
                     className="w-full"
-                    onClick={() => {
-                      if (confirm('Are you sure you want to cancel this order?')) {
-                        handleStatusUpdate('cancelled')
-                      }
-                    }}
+                    onClick={() => setCancelDialogOpen(true)}
                     disabled={updating}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
@@ -319,6 +489,29 @@ export default function OrderDetail() {
           </Card>
         </div>
       </div>
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Order</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this order? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={updating}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={updating}
+              onClick={() => {
+                handleStatusUpdate('cancelled')
+                setCancelDialogOpen(false)
+              }}
+            >
+              {updating ? 'Cancelling...' : 'Confirm Cancel'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -8,6 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
 import { Package, Heart, MapPin, CreditCard, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -68,6 +77,8 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
   const [isAddingAddress, setIsAddingAddress] = useState(false)
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null)
   const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [deleteAddressDialogOpen, setDeleteAddressDialogOpen] = useState(false)
+  const [addressToDelete, setAddressToDelete] = useState<string | null>(null)
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [loadingWishlist, setLoadingWishlist] = useState(false)
   
@@ -249,13 +260,18 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
     }
   }
 
-  const handleDeleteAddress = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this address?')) {
-      return
-    }
+  const handleDeleteAddress = (id: string) => {
+    setAddressToDelete(id)
+    setDeleteAddressDialogOpen(true)
+  }
+
+  const handleDeleteAddressConfirm = async () => {
+    if (!addressToDelete) return
 
     try {
-      await addressService.deleteAddress(id)
+      await addressService.deleteAddress(addressToDelete)
+      setDeleteAddressDialogOpen(false)
+      setAddressToDelete(null)
       toast({
         title: 'Address Deleted',
         description: 'Your address has been deleted successfully.',
@@ -808,6 +824,25 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
           </Card>
         </TabsContent>
       </Tabs>
+      <AlertDialog open={deleteAddressDialogOpen} onOpenChange={setDeleteAddressDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Address</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this address? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAddressConfirm}
+            >
+              Delete
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

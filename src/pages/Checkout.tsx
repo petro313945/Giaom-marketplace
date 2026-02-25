@@ -1,18 +1,29 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
+import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements
+} from '@stripe/react-stripe-js'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { MapPin, Star, Plus } from 'lucide-react'
+import { MapPin, Star, Plus, CreditCard } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import * as orderService from '../services/orderService'
 import * as addressService from '../services/addressService'
+import * as paymentService from '../services/paymentService'
 import type { ShippingAddress } from '../services/orderService'
 import type { Address } from '../services/addressService'
+
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder')
 
 interface CheckoutFormData {
   fullName: string
@@ -24,7 +35,109 @@ interface CheckoutFormData {
   phone: string
 }
 
-export default function Checkout() {
+// Payment Form Component
+function PaymentForm({ 
+  shippingAddress, 
+  total, 
+  clientSecret,
+  paymentIntentId,
+  onSuccess, 
+  onError 
+}: { 
+  shippingAddress: ShippingAddress
+  total: number
+  clientSecret: string
+  paymentIntentId: string
+  onSuccess: (orderId: string) => void
+  onError: (error: string) => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!stripe || !elements || !clientSecret) {
+      onError('Payment system not ready. Please try again.')
+      return
+    }
+
+    setIsProcessing(true)
+
+    try {
+      // Confirm payment with Stripe
+      const cardElement = elements.getElement(CardElement)
+      if (!cardElement) {
+        throw new Error('Card element not found')
+      }
+
+      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(
+        clientSecret,
+        {
+          payment_method: {
+            card: cardElement,
+          },
+        }
+      )
+
+      if (stripeError) {
+        onError(stripeError.message || 'Payment failed')
+        setIsProcessing(false)
+        return
+      }
+
+      if (paymentIntent?.status === 'succeeded') {
+        // Create order with payment intent ID
+        const orderResponse = await orderService.createOrder(shippingAddress, paymentIntentId)
+        onSuccess(orderResponse.order.id)
+      } else {
+        onError(`Payment status: ${paymentIntent?.status}`)
+        setIsProcessing(false)
+      }
+    } catch (error: any) {
+      onError(error.message || 'Payment processing failed')
+      setIsProcessing(false)
+    }
+  }
+
+  const cardElementOptions = {
+    style: {
+      base: {
+        fontSize: '16px',
+        color: '#424770',
+        '::placeholder': {
+          color: '#aab7c4',
+        },
+      },
+      invalid: {
+        color: '#9e2146',
+      },
+    },
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="card-element">Card Details</Label>
+        <div className="p-4 border rounded-md">
+          <CardElement id="card-element" options={cardElementOptions} />
+        </div>
+      </div>
+      <Button 
+        type="submit" 
+        size="lg" 
+        className="w-full" 
+        disabled={!stripe || isProcessing || !paymentIntentId}
+      >
+        {isProcessing ? 'Processing Payment...' : `Pay $${total.toFixed(2)}`}
+      </Button>
+    </form>
+  )
+}
+
+// Main Checkout Component
+function CheckoutForm() {
   const { cart, loading: cartLoading, clearCart } = useCart()
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -34,6 +147,9 @@ export default function Checkout() {
   const [loadingAddresses, setLoadingAddresses] = useState(false)
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [useNewAddress, setUseNewAddress] = useState(false)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null)
+  const [showPayment, setShowPayment] = useState(false)
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<CheckoutFormData>()
 
   useEffect(() => {
@@ -42,7 +158,6 @@ export default function Checkout() {
       try {
         const response = await addressService.getUserAddresses()
         setAddresses(response.addresses)
-        // Auto-select default address if available
         const defaultAddress = response.addresses.find(addr => addr.isDefault)
         if (defaultAddress) {
           setSelectedAddressId(defaultAddress.id)
@@ -50,7 +165,6 @@ export default function Checkout() {
         }
       } catch (error) {
         console.error('Failed to fetch addresses:', error)
-        // If addresses fail to load, allow manual entry
         setUseNewAddress(true)
       } finally {
         setLoadingAddresses(false)
@@ -79,7 +193,6 @@ export default function Checkout() {
   const handleUseNewAddress = () => {
     setSelectedAddressId(null)
     setUseNewAddress(true)
-    // Clear form
     setValue('fullName', '')
     setValue('address', '')
     setValue('city', '')
@@ -123,37 +236,61 @@ export default function Checkout() {
   const total = subtotal + tax
 
   const onSubmit = async (data: CheckoutFormData) => {
-    setIsSubmitting(true)
     setError(null)
 
-    try {
-      const shippingAddress: ShippingAddress = {
-        fullName: data.fullName,
-        address: data.address,
-        city: data.city,
-        state: data.state || '',
-        zipCode: data.zipCode,
-        country: data.country,
-        phone: data.phone || '',
-      }
+    const shippingAddress: ShippingAddress = {
+      fullName: data.fullName,
+      address: data.address,
+      city: data.city,
+      state: data.state || '',
+      zipCode: data.zipCode,
+      country: data.country,
+      phone: data.phone || '',
+    }
 
-      await orderService.createOrder(shippingAddress)
+    // Create payment intent
+    try {
+      setIsSubmitting(true)
+      const paymentResponse = await paymentService.createPaymentIntent()
+      setClientSecret(paymentResponse.clientSecret)
+      setPaymentIntentId(paymentResponse.paymentIntentId)
+      setShowPayment(true)
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to initialize payment')
+      toast({
+        title: 'Payment Error',
+        description: err.response?.data?.error || err.message || 'Failed to initialize payment',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handlePaymentSuccess = async (orderId: string) => {
+    try {
       await clearCart()
       toast({
         title: 'Order Placed Successfully!',
         description: 'Thank you for your order. We will process it shortly.',
         variant: 'default',
       })
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to place order')
-      toast({
-        title: 'Order Failed',
-        description: err.response?.data?.error || err.message || 'Failed to place order',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsSubmitting(false)
+      // Navigate to the order detail page to show confirmation
+      navigate(`/order/${orderId}`)
+    } catch (error) {
+      console.error('Error clearing cart:', error)
+      // Even if cart clearing fails, still navigate to order page
+      navigate(`/order/${orderId}`)
     }
+  }
+
+  const handlePaymentError = (errorMessage: string) => {
+    setError(errorMessage)
+    toast({
+      title: 'Payment Failed',
+      description: errorMessage,
+      variant: 'destructive',
+    })
   }
 
   return (
@@ -168,157 +305,199 @@ export default function Checkout() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Saved Addresses Section */}
-            {!loadingAddresses && addresses.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Select Shipping Address</CardTitle>
-                  <CardDescription>Choose from your saved addresses or enter a new one</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {addresses.map((address) => (
-                    <div
-                      key={address.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                        selectedAddressId === address.id && !useNewAddress
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                      onClick={() => handleSelectAddress(address)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-semibold">{address.fullName}</h4>
-                            {address.isDefault && (
-                              <Badge variant="default" className="text-xs">
-                                <Star className="h-3 w-3 mr-1" />
-                                Default
-                              </Badge>
+          {!showPayment ? (
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* Saved Addresses Section */}
+              {!loadingAddresses && addresses.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Select Shipping Address</CardTitle>
+                    <CardDescription>Choose from your saved addresses or enter a new one</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {addresses.map((address) => (
+                      <div
+                        key={address.id}
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                          selectedAddressId === address.id && !useNewAddress
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                        onClick={() => handleSelectAddress(address)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold">{address.fullName}</h4>
+                              {address.isDefault && (
+                                <Badge variant="default" className="text-xs">
+                                  <Star className="h-3 w-3 mr-1" />
+                                  Default
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">{address.address}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {address.city}
+                              {address.state && `, ${address.state}`} {address.zipCode}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{address.country}</p>
+                            {address.phone && (
+                              <p className="text-sm text-muted-foreground mt-1">Phone: {address.phone}</p>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{address.address}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {address.city}
-                            {address.state && `, ${address.state}`} {address.zipCode}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{address.country}</p>
-                          {address.phone && (
-                            <p className="text-sm text-muted-foreground mt-1">Phone: {address.phone}</p>
-                          )}
-                        </div>
-                        <div className="ml-4">
-                          <input
-                            type="radio"
-                            checked={selectedAddressId === address.id && !useNewAddress}
-                            onChange={() => handleSelectAddress(address)}
-                            className="h-4 w-4 text-primary"
-                          />
+                          <div className="ml-4">
+                            <input
+                              type="radio"
+                              checked={selectedAddressId === address.id && !useNewAddress}
+                              onChange={() => handleSelectAddress(address)}
+                              className="h-4 w-4 text-primary"
+                            />
+                          </div>
                         </div>
                       </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleUseNewAddress}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Use New Address
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Shipping Information Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    {addresses.length > 0 && !useNewAddress ? 'Selected Address' : 'Shipping Information'}
+                  </CardTitle>
+                  {addresses.length > 0 && !useNewAddress && (
+                    <CardDescription>Review or modify the selected address below</CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full Name</Label>
+                    <Input
+                      id="fullName"
+                      {...register('fullName', { required: 'Full name is required' })}
+                    />
+                    {errors.fullName && (
+                      <p className="text-sm text-destructive">{errors.fullName.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      {...register('address', { required: 'Address is required' })}
+                    />
+                    {errors.address && (
+                      <p className="text-sm text-destructive">{errors.address.message}</p>
+                    )}
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        {...register('city', { required: 'City is required' })}
+                      />
+                      {errors.city && (
+                        <p className="text-sm text-destructive">{errors.city.message}</p>
+                      )}
                     </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleUseNewAddress}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Use New Address
-                  </Button>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State/Province</Label>
+                      <Input id="state" {...register('state')} />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="zipCode">ZIP Code</Label>
+                      <Input
+                        id="zipCode"
+                        {...register('zipCode', { required: 'ZIP code is required' })}
+                      />
+                      {errors.zipCode && (
+                        <p className="text-sm text-destructive">{errors.zipCode.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="country">Country</Label>
+                      <Input
+                        id="country"
+                        {...register('country', { required: 'Country is required' })}
+                      />
+                      {errors.country && (
+                        <p className="text-sm text-destructive">{errors.country.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone (Optional)</Label>
+                    <Input id="phone" type="tel" {...register('phone')} />
+                  </div>
                 </CardContent>
               </Card>
-            )}
 
-            {/* Shipping Information Form */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  {addresses.length > 0 && !useNewAddress ? 'Selected Address' : 'Shipping Information'}
-                </CardTitle>
-                {addresses.length > 0 && !useNewAddress && (
-                  <CardDescription>Review or modify the selected address below</CardDescription>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    {...register('fullName', { required: 'Full name is required' })}
-                  />
-                  {errors.fullName && (
-                    <p className="text-sm text-destructive">{errors.fullName.message}</p>
+              <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? 'Processing...' : `Continue to Payment - $${total.toFixed(2)}`}
+              </Button>
+            </form>
+          ) : (
+            <Elements 
+              stripe={stripePromise} 
+              options={{
+                clientSecret: clientSecret || undefined,
+                appearance: {
+                  theme: 'stripe',
+                },
+              }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Payment Information
+                  </CardTitle>
+                  <CardDescription>Complete your payment to place the order</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {paymentIntentId && clientSecret && (
+                    <PaymentForm
+                      shippingAddress={{
+                        fullName: watch('fullName'),
+                        address: watch('address'),
+                        city: watch('city'),
+                        state: watch('state') || '',
+                        zipCode: watch('zipCode'),
+                        country: watch('country'),
+                        phone: watch('phone') || '',
+                      }}
+                      total={total}
+                      clientSecret={clientSecret}
+                      paymentIntentId={paymentIntentId}
+                      onSuccess={handlePaymentSuccess}
+                      onError={handlePaymentError}
+                    />
                   )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    {...register('address', { required: 'Address is required' })}
-                  />
-                  {errors.address && (
-                    <p className="text-sm text-destructive">{errors.address.message}</p>
-                  )}
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input
-                      id="city"
-                      {...register('city', { required: 'City is required' })}
-                    />
-                    {errors.city && (
-                      <p className="text-sm text-destructive">{errors.city.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="state">State/Province</Label>
-                    <Input id="state" {...register('state')} />
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="zipCode">ZIP Code</Label>
-                    <Input
-                      id="zipCode"
-                      {...register('zipCode', { required: 'ZIP code is required' })}
-                    />
-                    {errors.zipCode && (
-                      <p className="text-sm text-destructive">{errors.zipCode.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="country">Country</Label>
-                    <Input
-                      id="country"
-                      {...register('country', { required: 'Country is required' })}
-                    />
-                    {errors.country && (
-                      <p className="text-sm text-destructive">{errors.country.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone (Optional)</Label>
-                  <Input id="phone" type="tel" {...register('phone')} />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Placing Order...' : `Place Order - $${total.toFixed(2)}`}
-            </Button>
-          </form>
+                </CardContent>
+              </Card>
+            </Elements>
+          )}
         </div>
 
         <div className="lg:col-span-1">
@@ -374,4 +553,8 @@ export default function Checkout() {
       </div>
     </div>
   )
+}
+
+export default function Checkout() {
+  return <CheckoutForm />
 }

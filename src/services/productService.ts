@@ -1,5 +1,12 @@
 import api from './api';
 
+export interface ProductVariant {
+  size?: string;
+  color?: string;
+  price?: number;
+  stock: number;
+}
+
 export interface Product {
   _id: string;
   id?: string; // Alias for _id
@@ -10,6 +17,8 @@ export interface Product {
   category: string;
   imageUrl?: string;
   imageUrls?: string[]; // Array of image URLs
+  stockQuantity: number;
+  variants?: ProductVariant[];
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +63,8 @@ export interface CreateProductData {
   category: string;
   imageUrl?: string;
   imageUrls?: string[]; // Array of image URLs
+  stockQuantity?: number;
+  variants?: ProductVariant[];
 }
 
 export const createProduct = async (data: CreateProductData): Promise<{ message: string; product: Product }> => {
@@ -105,6 +116,8 @@ export interface UpdateProductData {
   category?: string;
   imageUrl?: string;
   imageUrls?: string[];
+  stockQuantity?: number;
+  variants?: ProductVariant[];
 }
 
 export const updateProduct = async (id: string, data: UpdateProductData): Promise<{ message: string; product: Product }> => {

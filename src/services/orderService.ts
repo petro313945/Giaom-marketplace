@@ -24,6 +24,8 @@ export interface Order {
   totalAmount: number;
   shippingAddress: ShippingAddress;
   status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  trackingNumber?: string;
+  carrier?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,9 +37,10 @@ export interface Product {
 }
 
 // Create order
-export const createOrder = async (shippingAddress: ShippingAddress): Promise<{ message: string; order: Order }> => {
+export const createOrder = async (shippingAddress: ShippingAddress, paymentIntentId: string): Promise<{ message: string; order: Order }> => {
   const response = await api.post<{ message: string; order: Order }>('/orders', {
     shippingAddress,
+    paymentIntentId,
   });
   return response.data;
 };
@@ -69,5 +72,14 @@ export const getAllOrders = async (): Promise<{ orders: Order[]; statistics: { t
 // Update order status (seller/admin)
 export const updateOrderStatus = async (orderId: string, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'): Promise<{ message: string; order: Order }> => {
   const response = await api.put<{ message: string; order: Order }>(`/orders/${orderId}/status`, { status });
+  return response.data;
+};
+
+// Update tracking number (seller/admin)
+export const updateTrackingNumber = async (orderId: string, trackingNumber: string, carrier?: string): Promise<{ message: string; order: Order }> => {
+  const response = await api.put<{ message: string; order: Order }>(`/orders/${orderId}/tracking`, { 
+    trackingNumber,
+    carrier 
+  });
   return response.data;
 };

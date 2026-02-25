@@ -4,6 +4,10 @@ export interface CartItem {
   id: string;
   productId: string | Product;
   quantity: number;
+  variant?: {
+    size?: string;
+    color?: string;
+  };
 }
 
 export interface Product {
@@ -28,10 +32,15 @@ export const getCart = async (): Promise<{ cart: Cart }> => {
 };
 
 // Add to cart
-export const addToCart = async (productId: string, quantity: number = 1): Promise<{ message: string; cart: Cart }> => {
+export const addToCart = async (
+  productId: string, 
+  quantity: number = 1,
+  variant?: { size?: string; color?: string }
+): Promise<{ message: string; cart: Cart }> => {
   const response = await api.post<{ message: string; cart: Cart }>('/cart/add', {
     productId,
     quantity,
+    variant: variant && (variant.size || variant.color) ? variant : undefined,
   });
   return response.data;
 };

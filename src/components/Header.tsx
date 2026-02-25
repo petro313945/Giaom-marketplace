@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, User, Menu, Heart } from 'lucide-react'
+import { Search, User, Menu, Heart, LogOut } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
@@ -136,8 +136,8 @@ export default function Header() {
                   <User className="h-5 w-5" />
                 </Link>
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
-                Logout
+              <Button variant="ghost" size="icon" onClick={handleLogout}>
+                <LogOut className="h-5 w-5" />
               </Button>
             </>
           )}

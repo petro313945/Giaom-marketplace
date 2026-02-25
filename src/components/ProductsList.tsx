@@ -101,6 +101,7 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
                   <th className="h-12 px-4 text-left font-medium">Title</th>
                   <th className="h-12 px-4 text-left font-medium">Price</th>
                   <th className="h-12 px-4 text-left font-medium">Category</th>
+                  <th className="h-12 px-4 text-left font-medium">Stock</th>
                   <th className="h-12 px-4 text-left font-medium">Status</th>
                   <th className="h-12 px-4 text-right font-medium">Actions</th>
                 </tr>
@@ -127,6 +128,19 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
                       </td>
                       <td className="h-16 px-4 align-middle">${product.price}</td>
                       <td className="h-16 px-4 align-middle">{product.category}</td>
+                      <td className="h-16 px-4 align-middle">
+                        <Badge
+                          variant={
+                            (product.stockQuantity ?? 0) === 0
+                              ? 'destructive'
+                              : (product.stockQuantity ?? 0) < 10
+                                ? 'secondary'
+                                : 'default'
+                          }
+                        >
+                          {(product.stockQuantity ?? 0) === 0 ? 'Out of Stock' : `${product.stockQuantity} in stock`}
+                        </Badge>
+                      </td>
                       <td className="h-16 px-4 align-middle">
                         <Badge
                           variant={

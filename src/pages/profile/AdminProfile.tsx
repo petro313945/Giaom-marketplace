@@ -7,13 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
 import * as orderService from '../../services/orderService'
 import * as reviewService from '../../services/reviewService'
 import * as reportService from '../../services/reportService'
+import * as payoutService from '../../services/payoutService'
 import RatingDisplay from '../../components/RatingDisplay'
 import { getFirstImageUrl } from '../../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
@@ -44,6 +54,16 @@ export default function AdminProfile() {
   const [reportAdminNotes, setReportAdminNotes] = useState<{ [key: string]: string }>({})
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
+  const [allPayouts, setAllPayouts] = useState<payoutService.Payout[]>([])
+  const [payoutsPagination, setPayoutsPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState<string>('all')
+  const [payoutStats, setPayoutStats] = useState<payoutService.PayoutStats | null>(null)
+  const [updatingPayoutId, setUpdatingPayoutId] = useState<string | null>(null)
+  const [selectedPayout, setSelectedPayout] = useState<payoutService.Payout | null>(null)
+  const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
+  const [payoutStatusUpdate, setPayoutStatusUpdate] = useState<{ status: string; failureReason?: string }>({ status: '' })
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null)
 
   const fetchProducts = async (page = 1) => {
     const response = await productService.getAllProducts({ page, limit: 10 })
@@ -79,6 +99,66 @@ export default function AdminProfile() {
       console.error('Failed to fetch pending reports count:', error)
     }
   }
+
+  const fetchPayouts = async (page = 1, status?: string) => {
+    try {
+      const params: payoutService.GetAllPayoutsParams = { page, limit: 20 }
+      if (status && status !== 'all') {
+        params.status = status
+      }
+      const response = await payoutService.getAllPayouts(params)
+      setAllPayouts(response.payouts)
+      setPayoutsPagination(response.pagination)
+    } catch (error) {
+      console.error('Failed to fetch payouts:', error)
+    }
+  }
+
+  const fetchPayoutStats = async () => {
+    try {
+      const stats = await payoutService.getPayoutStats()
+      setPayoutStats(stats)
+    } catch (error) {
+      console.error('Failed to fetch payout stats:', error)
+    }
+  }
+
+  const handleUpdatePayoutStatus = async (payoutId: string, status: string, failureReason?: string) => {
+    setUpdatingPayoutId(payoutId)
+    try {
+      await payoutService.updatePayoutStatus(payoutId, { status: status as any, failureReason })
+      toast({
+        title: 'Payout Updated',
+        description: `Payout status has been updated to ${status}.`,
+        variant: 'default',
+      })
+      await fetchPayouts(payoutsPagination.page, payoutStatusFilter)
+      await fetchPayoutStats()
+      setPayoutDialogOpen(false)
+      setSelectedPayout(null)
+      setPayoutStatusUpdate({ status: '' })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to update payout status'
+      toast({
+        title: 'Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingPayoutId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (payoutStatusFilter) {
+      fetchPayouts(1, payoutStatusFilter)
+      fetchPayoutStats()
+    }
+  }, [payoutStatusFilter])
+
+  useEffect(() => {
+    fetchPayouts(payoutsPagination.page, payoutStatusFilter)
+  }, [payoutsPagination.page])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -135,17 +215,22 @@ export default function AdminProfile() {
     }
   }
 
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
-      return
-    }
+  const handleDeleteUser = (userId: string, userName: string) => {
+    setUserToDelete({ id: userId, name: userName })
+    setDeleteUserDialogOpen(true)
+  }
+
+  const handleDeleteUserConfirm = async () => {
+    if (!userToDelete) return
 
     try {
-      await userService.deleteUser(userId)
+      await userService.deleteUser(userToDelete.id)
       setAllUsers((prev) => prev.filter((u) => {
         const uId = (u as any)._id || u.id
-        return uId !== userId
+        return uId !== userToDelete.id
       }))
+      setDeleteUserDialogOpen(false)
+      setUserToDelete(null)
       toast({
         title: 'User Deleted',
         description: 'The user has been deleted successfully.',
@@ -181,23 +266,6 @@ export default function AdminProfile() {
     (ordersPagination.page - 1) * ordersPagination.perPage,
     ordersPagination.page * ordersPagination.perPage
   )
-  
-  // Recent activity (last 5 orders)
-  const recentOrders = allOrders.slice(0, 5)
-
-  const getRelativeTime = (date: string | Date) => {
-    const now = new Date()
-    const past = new Date(date)
-    const diffMs = now.getTime() - past.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return past.toLocaleDateString()
-  }
 
   return (
     <div className="container py-8">
@@ -255,66 +323,6 @@ export default function AdminProfile() {
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Recent Activity
-          </CardTitle>
-          <CardDescription>Latest 5 orders in the marketplace — click to view details</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-3" />
-              <p className="text-muted-foreground font-medium">No recent orders</p>
-              <p className="text-sm text-muted-foreground mt-1">New orders will appear here</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentOrders.map((order) => {
-                const orderId = order._id || order.id
-                const user = order.userId as any
-                const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
-                return (
-                  <div
-                    key={orderId}
-                    onClick={() => navigate(`/order/${orderId}`)}
-                    className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-accent transition-colors cursor-pointer group"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                      <ShoppingCart className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">Order #{orderId.slice(-8)}</p>
-                      <p className="text-sm text-muted-foreground truncate">{userEmail}</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
-                      <Clock className="h-4 w-4" />
-                      {getRelativeTime(order.createdAt)}
-                    </div>
-                    <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)} shrink-0`}>
-                      {order.status}
-                    </span>
-                    <div className="text-right shrink-0">
-                      <p className="font-semibold text-primary">${order.totalAmount?.toFixed(2) ?? '0.00'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.items?.length ?? 0} {order.items?.length === 1 ? 'item' : 'items'}
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground shrink-0 transition-colors" />
-                  </div>
-                )
-              })}
-            </div>
-          )}
-          {recentOrders.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">Max 5</p>
-          )}
-        </CardContent>
-      </Card>
-
       <Tabs defaultValue="sellers" className="space-y-6">
         <TabsList>
           <TabsTrigger value="sellers" className="gap-2">
@@ -363,6 +371,15 @@ export default function AdminProfile() {
             {pendingReportsCount > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
                 {pendingReportsCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="payouts" className="gap-2">
+            <Wallet className="h-4 w-4" />
+            Payouts
+            {payoutStats && payoutStats.pending > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
+                {payoutStats.pending}
               </span>
             )}
           </TabsTrigger>
@@ -1622,7 +1639,312 @@ export default function AdminProfile() {
             </DialogContent>
           </Dialog>
         </TabsContent>
+
+        <TabsContent value="payouts" className="space-y-4">
+          {/* Payout Statistics */}
+          {payoutStats && (
+            <div className="grid md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Total Payouts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{payoutStats.total}</div>
+                  <p className="text-xs text-muted-foreground">All time</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Pending</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-orange-600">{payoutStats.pending}</div>
+                  <p className="text-xs text-muted-foreground">${payoutStats.pendingAmount.toFixed(2)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Completed</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{payoutStats.completed}</div>
+                  <p className="text-xs text-muted-foreground">${payoutStats.totalPaidOut.toFixed(2)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Total Commission</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">${payoutStats.totalCommission.toFixed(2)}</div>
+                  <p className="text-xs text-muted-foreground">Marketplace earnings</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Payouts List */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Payout Management</CardTitle>
+                  <CardDescription>Review and process seller payout requests</CardDescription>
+                </div>
+                <Select value={payoutStatusFilter} onValueChange={setPayoutStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {allPayouts.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No payouts found</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="h-10 px-4 text-left font-medium">Date</th>
+                          <th className="h-10 px-4 text-left font-medium">Seller</th>
+                          <th className="h-10 px-4 text-left font-medium">Amount</th>
+                          <th className="h-10 px-4 text-left font-medium">Commission</th>
+                          <th className="h-10 px-4 text-left font-medium">Net Amount</th>
+                          <th className="h-10 px-4 text-left font-medium">Status</th>
+                          <th className="h-10 px-4 text-left font-medium">Orders</th>
+                          <th className="h-10 px-4 text-right font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allPayouts.map((payout) => {
+                          const seller = (payout as any).sellerId
+                          const sellerName = seller?.fullName || seller?.email || 'Unknown'
+                          return (
+                            <tr
+                              key={payout.id}
+                              className="border-b transition-colors hover:bg-muted/50 last:border-0"
+                            >
+                              <td className="px-4 py-3 text-muted-foreground">
+                                {new Date(payout.requestedAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-4 py-3 font-medium">{sellerName}</td>
+                              <td className="px-4 py-3">${payout.amount.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">
+                                ${payout.commission.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 font-medium text-green-600">
+                                ${payout.netAmount.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <Badge
+                                  variant={
+                                    payout.status === 'completed'
+                                      ? 'default'
+                                      : payout.status === 'failed' || payout.status === 'cancelled'
+                                      ? 'destructive'
+                                      : 'secondary'
+                                  }
+                                >
+                                  {payout.status}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground">
+                                {payout.orderCount} order{payout.orderCount !== 1 ? 's' : ''}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedPayout(payout)
+                                    setPayoutStatusUpdate({ status: payout.status })
+                                    setPayoutDialogOpen(true)
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Manage
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {payoutsPagination.pages > 1 && (
+                    <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                      <span className="text-muted-foreground">
+                        Showing {((payoutsPagination.page - 1) * payoutsPagination.limit) + 1}–
+                        {Math.min(payoutsPagination.page * payoutsPagination.limit, payoutsPagination.total)} of{' '}
+                        {payoutsPagination.total} payouts
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={payoutsPagination.page <= 1}
+                          onClick={() => setPayoutsPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="text-muted-foreground min-w-[120px] text-center">
+                          Page {payoutsPagination.page} of {payoutsPagination.pages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={payoutsPagination.page >= payoutsPagination.pages}
+                          onClick={() => setPayoutsPagination((p) => ({ ...p, page: Math.min(payoutsPagination.pages, p.page + 1) }))}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Payout Management Dialog */}
+          <Dialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Manage Payout</DialogTitle>
+                <DialogDescription>
+                  Update payout status and view details
+                </DialogDescription>
+              </DialogHeader>
+              {selectedPayout && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Seller</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(selectedPayout as any).sellerId?.fullName || (selectedPayout as any).sellerId?.email || 'Unknown'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Requested Date</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(selectedPayout.requestedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Amount</p>
+                      <p className="text-sm text-muted-foreground">${selectedPayout.amount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Commission</p>
+                      <p className="text-sm text-muted-foreground">${selectedPayout.commission.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Net Amount</p>
+                      <p className="text-sm font-bold text-green-600">${selectedPayout.netAmount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Orders</p>
+                      <p className="text-sm text-muted-foreground">{selectedPayout.orderCount} orders</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Update Status</p>
+                    <Select
+                      value={payoutStatusUpdate.status}
+                      onValueChange={(value) => setPayoutStatusUpdate({ ...payoutStatusUpdate, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="processing">Processing</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(payoutStatusUpdate.status === 'failed' || payoutStatusUpdate.status === 'cancelled') && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Failure Reason (Optional)</p>
+                      <textarea
+                        className="w-full min-h-[100px] px-3 py-2 text-sm border rounded-md"
+                        placeholder="Enter reason for failure or cancellation..."
+                        value={payoutStatusUpdate.failureReason || ''}
+                        onChange={(e) => setPayoutStatusUpdate({ ...payoutStatusUpdate, failureReason: e.target.value })}
+                      />
+                    </div>
+                  )}
+                  {selectedPayout.failureReason && (
+                    <div>
+                      <p className="text-sm font-medium">Previous Failure Reason</p>
+                      <p className="text-sm text-red-600">{selectedPayout.failureReason}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPayoutDialogOpen(false)
+                    setSelectedPayout(null)
+                    setPayoutStatusUpdate({ status: '' })
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedPayout && payoutStatusUpdate.status) {
+                      handleUpdatePayoutStatus(
+                        selectedPayout.id,
+                        payoutStatusUpdate.status,
+                        payoutStatusUpdate.failureReason
+                      )
+                    }
+                  }}
+                  disabled={!payoutStatusUpdate.status || updatingPayoutId === selectedPayout?.id}
+                >
+                  {updatingPayoutId === selectedPayout?.id ? 'Updating...' : 'Update Status'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
       </Tabs>
+      <AlertDialog open={deleteUserDialogOpen} onOpenChange={setDeleteUserDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              {userToDelete && `Are you sure you want to delete user "${userToDelete.name}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUserConfirm}
+            >
+              Delete
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
