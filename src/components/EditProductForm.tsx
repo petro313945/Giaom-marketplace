@@ -766,7 +766,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
               <div className="grid grid-cols-3 gap-2 mt-2">
                 {images.map((img) => (
                   <div key={img.id} className="relative group">
-                    <img src={img.preview} alt="" className="w-full h-20 object-cover rounded border" />
+                    <img src={img.preview} alt="" className="w-full h-20 object-contain rounded border bg-muted" />
                     <Button type="button" variant="destructive" size="sm" className="absolute top-1 right-1 h-6 w-6 p-0" onClick={() => handleRemoveImage(img.id)}>
                       <X className="h-3 w-3" />
                     </Button>
@@ -774,7 +774,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
                 ))}
                 {urlInputs.map((url, index) => url.trim() ? (
                   <div key={`url-${index}`} className="relative group">
-                    <img src={getImageUrl(url)} alt="" className="w-full h-20 object-cover rounded border" />
+                    <img src={getImageUrl(url)} alt="" className="w-full h-20 object-contain rounded border bg-muted" />
                     <Button
                       type="button"
                       variant="destructive"

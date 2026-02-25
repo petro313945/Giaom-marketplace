@@ -55,6 +55,12 @@ export const getProductById = async (id: string): Promise<{ product: Product }> 
   return response.data;
 };
 
+// Get product purchase statistics
+export const getProductPurchaseStats = async (id: string): Promise<{ productId: string; purchaseCount: number; period: string }> => {
+  const response = await api.get<{ productId: string; purchaseCount: number; period: string }>(`/products/${id}/purchase-stats`);
+  return response.data;
+};
+
 // Create product (seller only)
 export interface CreateProductData {
   title: string;

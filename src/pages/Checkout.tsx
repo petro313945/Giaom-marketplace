@@ -19,6 +19,7 @@ import { useCart } from '../context/CartContext'
 import * as orderService from '../services/orderService'
 import * as addressService from '../services/addressService'
 import * as paymentService from '../services/paymentService'
+import { getImageUrl } from '../utils/imageUtils'
 import type { ShippingAddress } from '../services/orderService'
 import type { Address } from '../services/addressService'
 
@@ -511,14 +512,14 @@ function CheckoutForm() {
                   const product = item.productId as any
                   const productName = typeof product === 'object' ? product.title : 'Product'
                   const productPrice = typeof product === 'object' ? product.price : 0
-                  const productImage = typeof product === 'object' ? product.imageUrl : '/placeholder.svg'
+                  const productImage = typeof product === 'object' ? getImageUrl(product.imageUrl) : '/placeholder.svg'
                   
                   return (
                     <div key={item.id} className="flex gap-3">
                       <img
-                        src={productImage || '/placeholder.svg'}
+                        src={productImage}
                         alt={productName}
-                        className="h-16 w-16 rounded object-cover"
+                        className="h-16 w-16 rounded object-contain bg-muted"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{productName}</p>

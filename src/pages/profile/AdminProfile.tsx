@@ -585,9 +585,10 @@ export default function AdminProfile() {
                             <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
                             <td className="px-4 py-3">
                               <img
+                                key={`product-img-${productId}`}
                                 src={getFirstImageUrl(product)}
                                 alt={product.title}
-                                className="h-12 w-12 rounded-lg object-cover"
+                                className="h-12 w-12 rounded-lg object-contain bg-muted"
                               />
                             </td>
                             <td className="px-4 py-3 font-medium max-w-[180px]" title={product.title}>
@@ -1492,7 +1493,7 @@ export default function AdminProfile() {
                                 <img
                                   src={selectedReport.reportedContent.imageUrl || selectedReport.reportedContent.imageUrls[0]}
                                   alt={selectedReport.reportedContent.title}
-                                  className="h-16 w-16 rounded object-cover"
+                                  className="h-16 w-16 rounded object-contain bg-muted"
                                 />
                               ) : null}
                               <div className="flex-1">

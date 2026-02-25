@@ -3,16 +3,19 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Star, ShoppingCart, ArrowLeft, Heart } from 'lucide-react'
+import { Star, ShoppingCart, ArrowLeft, Heart, Minus, Plus, Truck, RotateCcw, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import * as productService from '../services/productService'
 import * as wishlistService from '../services/wishlistService'
 import * as reviewService from '../services/reviewService'
+import * as categoryService from '../services/categoryService'
 import RatingDisplay from '../components/RatingDisplay'
+import ProductRating from '../components/ProductRating'
 import ReviewList from '../components/ReviewList'
 import ReviewForm from '../components/ReviewForm'
 import ReportDialog from '../components/ReportDialog'
@@ -23,7 +26,7 @@ import type { ReviewStats, Review } from '../services/reviewService'
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { addItem } = useCart()
+  const { addItem, clearCart } = useCart()
   const { isAuthenticated } = useAuth()
   const { toast } = useToast()
   const [product, setProduct] = useState<Product | null>(null)
@@ -39,6 +42,9 @@ export default function ProductDetail() {
   const [userReview, setUserReview] = useState<Review | null>(null)
   const [loadingReviewStats, setLoadingReviewStats] = useState(false)
   const [selectedVariant, setSelectedVariant] = useState<{ size?: string; color?: string } | null>(null)
+  const [quantity, setQuantity] = useState(1)
+  const [categoryName, setCategoryName] = useState<string>('')
+  const [purchaseCount, setPurchaseCount] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -48,6 +54,39 @@ export default function ProductDetail() {
         setError(null)
         const response = await productService.getProductById(id)
         setProduct(response.product)
+        
+        // Fetch category name for breadcrumb
+        if (response.product.category) {
+          try {
+            const categoriesResponse = await categoryService.getCategories()
+            const category = categoriesResponse.categories.find(
+              cat => cat.slug === response.product.category
+            )
+            if (category) {
+              setCategoryName(category.name)
+            } else {
+              // Fallback to capitalized slug if category not found
+              setCategoryName(response.product.category.split('-').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+              ).join(' '))
+            }
+          } catch (error) {
+            console.error('Failed to fetch category:', error)
+            // Fallback to capitalized slug
+            setCategoryName(response.product.category.split('-').map(word => 
+              word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' '))
+          }
+        }
+        
+        // Fetch purchase statistics
+        try {
+          const statsResponse = await productService.getProductPurchaseStats(id)
+          setPurchaseCount(statsResponse.purchaseCount)
+        } catch (error) {
+          console.error('Failed to fetch purchase stats:', error)
+          // Don't show error to user, just don't display purchase count
+        }
         
         // Fetch related products from the same category
         if (response.product.category) {
@@ -135,6 +174,16 @@ export default function ProductDetail() {
     fetchReviewData()
   }, [product, isAuthenticated])
 
+  // Adjust quantity when available stock changes
+  useEffect(() => {
+    const availableStock = getAvailableStock()
+    if (quantity > availableStock && availableStock > 0) {
+      setQuantity(availableStock)
+    } else if (availableStock === 0) {
+      setQuantity(1)
+    }
+  }, [selectedVariant, product])
+
   const handleAddToCart = async () => {
     if (!product) return
     
@@ -161,7 +210,7 @@ export default function ProductDetail() {
     
     try {
       const productId = product._id || product.id
-      await addItem(productId, 1, selectedVariant || undefined)
+      await addItem(productId, quantity, selectedVariant || undefined)
       setAdded(true)
       const variantLabel = selectedVariant 
         ? ` (${[selectedVariant.size, selectedVariant.color].filter(Boolean).join(' / ')})`
@@ -179,6 +228,55 @@ export default function ProductDetail() {
         title: 'Error',
         description: errorMessage.includes('log in') 
           ? 'Please log in to add items to your cart.' 
+          : errorMessage,
+        variant: 'destructive',
+      })
+      if (errorMessage.includes('log in')) {
+        setTimeout(() => navigate('/auth/login'), 1500)
+      }
+    }
+  }
+
+  const handleBuyNow = async () => {
+    if (!product) return
+    
+    // Check authentication first
+    if (!isAuthenticated) {
+      toast({
+        title: 'Login Required',
+        description: 'Please log in to purchase items.',
+        variant: 'default',
+      })
+      navigate('/auth/login')
+      return
+    }
+
+    // If product has variants, require variant selection
+    if (product.variants && product.variants.length > 0 && !selectedVariant) {
+      toast({
+        title: 'Variant Required',
+        description: 'Please select a variant (size/color) before purchasing.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    try {
+      const productId = product._id || product.id
+      
+      // Clear cart first, then add this item
+      await clearCart()
+      await addItem(productId, quantity, selectedVariant || undefined)
+      
+      // Navigate to checkout
+      navigate('/checkout')
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to proceed to checkout'
+      setError(errorMessage)
+      toast({
+        title: 'Error',
+        description: errorMessage.includes('log in') 
+          ? 'Please log in to purchase items.' 
           : errorMessage,
         variant: 'destructive',
       })
@@ -216,6 +314,20 @@ export default function ProductDetail() {
       }
     }
     return product.price
+  }
+
+  // Format purchase count (e.g., "1K+", "500+", "50+")
+  const formatPurchaseCount = (count: number): string => {
+    if (count >= 1000) {
+      const thousands = Math.floor(count / 1000)
+      return `${thousands}K+`
+    } else if (count >= 100) {
+      const hundreds = Math.floor(count / 100) * 100
+      return `${hundreds}+`
+    } else if (count > 0) {
+      return `${count}+`
+    }
+    return ''
   }
 
   const handleToggleWishlist = async () => {
@@ -285,16 +397,47 @@ export default function ProductDetail() {
     )
   }
 
+  // Parse category name for hierarchical breadcrumb (e.g., "Cell Phones & Accessories › Cell Phones")
+  const parseCategoryBreadcrumb = (name: string) => {
+    // Check if category name contains separator (› or >)
+    const separators = ['›', '>', '→']
+    for (const sep of separators) {
+      if (name.includes(sep)) {
+        return name.split(sep).map(part => part.trim()).filter(Boolean)
+      }
+    }
+    return [name]
+  }
+
+  const categoryBreadcrumbs = categoryName ? parseCategoryBreadcrumb(categoryName) : []
+
   return (
     <div className="container py-12">
-      <Button 
-        variant="ghost" 
-        onClick={() => navigate(-1)}
-        className="mb-6"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back
-      </Button>
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-6" aria-label="Breadcrumb">
+        <ol className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+          <li>
+            <Link to="/" className="hover:text-foreground transition-colors">
+              Home
+            </Link>
+          </li>
+          {categoryBreadcrumbs.map((crumb, index) => (
+            <li key={index} className="flex items-center gap-2">
+              <span className="text-muted-foreground">›</span>
+              {index === categoryBreadcrumbs.length - 1 ? (
+                <span className="text-foreground capitalize">{crumb}</span>
+              ) : (
+                <Link 
+                  to={`/category/${product?.category}`} 
+                  className="hover:text-foreground transition-colors capitalize"
+                >
+                  {crumb}
+                </Link>
+              )}
+            </li>
+          ))}
+        </ol>
+      </nav>
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="flex flex-row gap-4">
@@ -314,7 +457,7 @@ export default function ProductDetail() {
                   <img
                     src={getImageUrl(imageUrl)}
                     alt={`${product.title} - Image ${index + 1}`}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain bg-muted"
                   />
                 </button>
               ))}
@@ -322,7 +465,7 @@ export default function ProductDetail() {
           )}
           
           {/* Main Image (Right of thumbnails) */}
-          <div className="relative flex-1 min-w-0 bg-white rounded-lg overflow-hidden border">
+          <div className="relative flex-1 min-w-0 bg-muted rounded-lg overflow-hidden border">
             <img
               src={getImageUrl(
                 (product.imageUrls && product.imageUrls.length > 0) 
@@ -336,23 +479,80 @@ export default function ProductDetail() {
         </div>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold mb-2">{product.title}</h1>
-            <div className="flex items-center gap-2 mb-4">
+            {/* Seller/Store Name */}
+            {product.sellerId && typeof product.sellerId === 'object' && product.sellerId.fullName && (
+              <div className="mb-2">
+                <Link 
+                  to="#" 
+                  className="text-sm text-primary hover:underline"
+                >
+                  Visit the {product.sellerId.fullName} Store
+                </Link>
+              </div>
+            )}
+            
+            <h1 className="text-2xl font-semibold mb-2">{product.title}</h1>
+            
+            {/* Rating and Review Count */}
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
               {reviewStats ? (
-                <RatingDisplay
-                  rating={reviewStats.averageRating}
-                  totalReviews={reviewStats.totalReviews}
-                  showCount
-                  size="md"
-                />
+                <>
+                  <div className="flex items-center gap-1">
+                    <RatingDisplay
+                      rating={reviewStats.averageRating}
+                      totalReviews={reviewStats.totalReviews}
+                      showCount
+                      size="sm"
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    ({reviewStats.totalReviews.toLocaleString()} {reviewStats.totalReviews === 1 ? 'review' : 'reviews'})
+                  </span>
+                </>
               ) : (
                 <div className="flex items-center gap-1">
-                  <Star className="h-5 w-5 text-gray-300" />
-                  <span className="text-muted-foreground">No ratings yet</span>
+                  <Star className="h-4 w-4 text-gray-300" />
+                  <span className="text-sm text-muted-foreground">No ratings yet</span>
                 </div>
               )}
+              {purchaseCount !== null && purchaseCount > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  {formatPurchaseCount(purchaseCount)} bought in past month
+                </span>
+              )}
             </div>
-            <p className="text-3xl font-bold">${getDisplayPrice()}</p>
+
+            {/* Price Information */}
+            <div className="mb-4">
+              <div className="flex items-baseline gap-2 mb-1">
+                <p className="text-3xl font-bold">${getDisplayPrice().toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Essential Product Information */}
+            <div className="space-y-2 text-sm border-t border-b py-4 my-4">
+              <div className="flex items-start gap-2">
+                <Truck className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium">Free Shipping</span>
+                  <p className="text-muted-foreground text-xs">Available on orders over $50</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <RotateCcw className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium">Free Returns</span>
+                  <p className="text-muted-foreground text-xs">30-day return policy</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium">Secure Payment</span>
+                  <p className="text-muted-foreground text-xs">Your payment information is protected</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Variant Selector */}
@@ -374,7 +574,10 @@ export default function ProductDetail() {
                         type="button"
                         variant={selectedVariant?.size === size ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setSelectedVariant({ ...selectedVariant, size })}
+                        onClick={() => {
+                          setSelectedVariant({ ...selectedVariant, size })
+                          setQuantity(1)
+                        }}
                       >
                         {size}
                       </Button>
@@ -399,7 +602,10 @@ export default function ProductDetail() {
                         type="button"
                         variant={selectedVariant?.color === color ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setSelectedVariant({ ...selectedVariant, color })}
+                        onClick={() => {
+                          setSelectedVariant({ ...selectedVariant, color })
+                          setQuantity(1)
+                        }}
                       >
                         {color}
                       </Button>
@@ -427,9 +633,51 @@ export default function ProductDetail() {
             )}
           </div>
 
+          {/* Quantity Selector */}
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Quantity</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
+                disabled={quantity <= 1}
+                className="h-10 w-10"
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Input
+                type="number"
+                min="1"
+                max={getAvailableStock()}
+                value={quantity}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || 1
+                  const maxStock = getAvailableStock()
+                  setQuantity(Math.max(1, Math.min(value, maxStock)))
+                }}
+                className="w-20 text-center"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  const maxStock = getAvailableStock()
+                  setQuantity(prev => Math.min(maxStock, prev + 1))
+                }}
+                disabled={quantity >= getAvailableStock()}
+                className="h-10 w-10"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
           {product.description && (
             <div>
-              <h2 className="text-xl font-semibold mb-2">Description</h2>
+              <h2 className="text-xl font-semibold mb-2">About this item</h2>
               <p className="text-muted-foreground">{product.description}</p>
             </div>
           )}
@@ -439,12 +687,33 @@ export default function ProductDetail() {
             <p className="font-medium capitalize">{product.category}</p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-3">
+              <Button 
+                size="lg" 
+                className="flex-1" 
+                onClick={handleBuyNow} 
+                disabled={added || getAvailableStock() === 0}
+                variant="default"
+              >
+                Buy Now
+              </Button>
+              <Button
+                size="lg"
+                variant={inWishlist ? "default" : "outline"}
+                onClick={handleToggleWishlist}
+                disabled={wishlistLoading}
+                className="px-4"
+              >
+                <Heart className={`h-5 w-5 ${inWishlist ? 'fill-current' : ''}`} />
+              </Button>
+            </div>
             <Button 
               size="lg" 
-              className="flex-1" 
+              className="w-full" 
               onClick={handleAddToCart} 
               disabled={added || getAvailableStock() === 0}
+              variant="outline"
             >
               <ShoppingCart className="mr-2 h-5 w-5" />
               {getAvailableStock() === 0 
@@ -452,15 +721,6 @@ export default function ProductDetail() {
                 : added 
                   ? "Added to Cart!" 
                   : "Add to Cart"}
-            </Button>
-            <Button
-              size="lg"
-              variant={inWishlist ? "default" : "outline"}
-              onClick={handleToggleWishlist}
-              disabled={wishlistLoading}
-              className="px-4"
-            >
-              <Heart className={`h-5 w-5 ${inWishlist ? 'fill-current' : ''}`} />
             </Button>
           </div>
           
@@ -596,7 +856,7 @@ export default function ProductDetail() {
       {/* Related Products Section */}
       {!loadingRelated && relatedProducts.length > 0 && (
         <div className="mt-16">
-          <h2 className="text-2xl md:text-3xl font-bold mb-8">Related Products</h2>
+          <h2 className="text-2xl md:text-3xl font-bold mb-8">More items to explore</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {relatedProducts.map((relatedProduct) => {
               const productId = relatedProduct._id || relatedProduct.id
@@ -607,12 +867,12 @@ export default function ProductDetail() {
                       <img
                         src={getImageUrl(relatedProduct.imageUrl)}
                         alt={relatedProduct.title}
-                        className="w-full h-48 object-cover rounded-t-lg"
+                        className="w-full h-48 object-contain rounded-t-lg bg-muted"
                       />
                     </CardContent>
                     <CardFooter className="flex flex-col items-start gap-2 p-4">
                       <h4 className="font-semibold text-lg line-clamp-2" title={relatedProduct.title}>{relatedProduct.title}</h4>
-                      <RatingDisplay rating={4.5} totalReviews={0} showCount size="sm" />
+                      <ProductRating productId={productId} size="sm" showCount />
                       <div className="flex items-center justify-between w-full">
                         <span className="text-xl font-bold">${relatedProduct.price}</span>
                       </div>

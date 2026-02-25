@@ -14,6 +14,7 @@ import * as categoryService from '../services/categoryService'
 import * as productService from '../services/productService'
 import { getFirstImageUrl } from '../utils/imageUtils'
 import ProductRating from '../components/ProductRating'
+import VariantSelectionModal from '../components/VariantSelectionModal'
 import type { Product } from '../services/productService'
 import type { Category } from '../services/categoryService'
 
@@ -26,12 +27,15 @@ export default function Category() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
+  const [viewAll, setViewAll] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
     total: 0,
     pages: 0
   })
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const { addItem } = useCart()
   const { isAuthenticated } = useAuth()
   const { toast } = useToast()
@@ -69,8 +73,8 @@ export default function Category() {
         // Fetch products with filters
         const params: any = {
           category: slug,
-          page,
-          limit: 20
+          page: viewAll ? 1 : page,
+          limit: viewAll ? 1000 : 20 // Fetch all products when viewAll is true
         }
 
         if (minPrice) params.minPrice = minPrice
@@ -89,7 +93,7 @@ export default function Category() {
     }
 
     fetchData()
-  }, [slug, minPrice, maxPrice, sortBy, sortOrder, page])
+  }, [slug, minPrice, maxPrice, sortBy, sortOrder, page, viewAll])
 
   const updateSearchParams = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams)
@@ -130,12 +134,55 @@ export default function Category() {
       return
     }
     
+    // If product has variants, open variant selection modal
+    if (product.variants && product.variants.length > 0) {
+      setSelectedProduct(product)
+      setIsVariantModalOpen(true)
+      return
+    }
+    
+    // Check stock availability for simple products
+    if (product.stockQuantity === 0 || !product.stockQuantity) {
+      toast({
+        title: 'Out of Stock',
+        description: 'This product is currently out of stock.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
     try {
       const productId = product._id || product.id
       await addItem(productId, 1)
       toast({
         title: 'Added to Cart',
         description: `${product.title} has been added to your cart.`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
+      toast({
+        title: 'Error',
+        description: errorMessage.includes('log in') 
+          ? 'Please log in to add items to your cart.' 
+          : errorMessage,
+        variant: 'destructive',
+      })
+      if (errorMessage.includes('log in')) {
+        setTimeout(() => navigate('/auth/login'), 1500)
+      }
+    }
+  }
+
+  const handleVariantAddToCart = async (variant?: { size?: string; color?: string }) => {
+    if (!selectedProduct) return
+
+    try {
+      const productId = selectedProduct._id || selectedProduct.id
+      await addItem(productId, 1, variant)
+      toast({
+        title: 'Added to Cart',
+        description: `${selectedProduct.title} has been added to your cart.`,
         variant: 'default',
       })
     } catch (error: any) {
@@ -277,16 +324,33 @@ export default function Category() {
               <div>
                 <h2 className="text-2xl font-bold">{categoryName}</h2>
                 <p className="text-sm text-muted-foreground">
-                  {pagination.total} {pagination.total === 1 ? 'product' : 'products'} found
+                  {viewAll 
+                    ? `Showing all ${products.length} ${products.length === 1 ? 'product' : 'products'}`
+                    : `${pagination.total} ${pagination.total === 1 ? 'product' : 'products'} found`
+                  }
                 </p>
               </div>
-              <Button
-                variant="outline"
-                className="md:hidden"
-                onClick={() => setShowFilters(!showFilters)}
-              >
-                <Sliders className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewAll ? "default" : "outline"}
+                  onClick={() => {
+                    setViewAll(!viewAll)
+                    // Reset to page 1 when toggling view all
+                    if (!viewAll) {
+                      updateSearchParams({ page: '1' })
+                    }
+                  }}
+                >
+                  {viewAll ? 'View Paginated' : 'View All Products'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="md:hidden"
+                  onClick={() => setShowFilters(!showFilters)}
+                >
+                  <Sliders className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Products Grid */}
@@ -313,7 +377,7 @@ export default function Category() {
                     <img
                       src={getFirstImageUrl(product)}
                       alt={product.title}
-                      className="w-full h-64 object-cover rounded-t-lg"
+                      className="w-full h-64 object-contain rounded-t-lg bg-muted"
                     />
                         </CardContent>
                         <CardFooter className="flex flex-col items-start gap-2 p-4">
@@ -321,8 +385,19 @@ export default function Category() {
                           <ProductRating productId={productId} size="sm" showCount />
                           <div className="flex items-center justify-between w-full">
                             <span className="text-xl font-bold">${product.price}</span>
-                            <Button size="sm" onClick={(e) => handleAddToCart(e, product)}>
-                              Add to Cart
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => handleAddToCart(e, product)}
+                              disabled={
+                                !(product.variants && product.variants.length > 0) &&
+                                (product.stockQuantity === 0 || !product.stockQuantity)
+                              }
+                            >
+                              {product.variants && product.variants.length > 0
+                                ? 'Add to Cart'
+                                : product.stockQuantity === 0 || !product.stockQuantity
+                                ? 'Out of Stock'
+                                : 'Add to Cart'}
                             </Button>
                           </div>
                         </CardFooter>
@@ -333,7 +408,7 @@ export default function Category() {
                 </div>
 
                 {/* Pagination */}
-                {pagination.pages > 1 && (
+                {!viewAll && pagination.pages > 1 && (
                   <div className="flex items-center justify-center gap-2">
                     <Button
                       variant="outline"
@@ -359,6 +434,14 @@ export default function Category() {
           </div>
         </div>
       </div>
+
+      {/* Variant Selection Modal */}
+      <VariantSelectionModal
+        product={selectedProduct}
+        open={isVariantModalOpen}
+        onOpenChange={setIsVariantModalOpen}
+        onAddToCart={handleVariantAddToCart}
+      />
     </>
   )
 }

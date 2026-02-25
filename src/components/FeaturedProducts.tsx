@@ -9,11 +9,14 @@ import { useToast } from './ui/use-toast'
 import * as productService from '../services/productService'
 import { getFirstImageUrl } from '../utils/imageUtils'
 import ProductRating from './ProductRating'
+import VariantSelectionModal from './VariantSelectionModal'
 import type { Product } from '../services/productService'
 
 export default function FeaturedProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const { addItem } = useCart()
   const { isAuthenticated } = useAuth()
   const { toast } = useToast()
@@ -49,12 +52,55 @@ export default function FeaturedProducts() {
       return
     }
     
+    // If product has variants, open variant selection modal
+    if (product.variants && product.variants.length > 0) {
+      setSelectedProduct(product)
+      setIsVariantModalOpen(true)
+      return
+    }
+    
+    // Check stock availability for simple products
+    if (product.stockQuantity === 0 || !product.stockQuantity) {
+      toast({
+        title: 'Out of Stock',
+        description: 'This product is currently out of stock.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
     try {
       const productId = product._id || product.id
       await addItem(productId, 1)
       toast({
         title: 'Added to Cart',
         description: `${product.title} has been added to your cart.`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
+      toast({
+        title: 'Error',
+        description: errorMessage.includes('log in') 
+          ? 'Please log in to add items to your cart.' 
+          : errorMessage,
+        variant: 'destructive',
+      })
+      if (errorMessage.includes('log in')) {
+        setTimeout(() => navigate('/auth/login'), 1500)
+      }
+    }
+  }
+
+  const handleVariantAddToCart = async (variant?: { size?: string; color?: string }) => {
+    if (!selectedProduct) return
+
+    try {
+      const productId = selectedProduct._id || selectedProduct.id
+      await addItem(productId, 1, variant)
+      toast({
+        title: 'Added to Cart',
+        description: `${selectedProduct.title} has been added to your cart.`,
         variant: 'default',
       })
     } catch (error: any) {
@@ -102,7 +148,7 @@ export default function FeaturedProducts() {
                 <img
                   src={getFirstImageUrl(product)}
                   alt={product.title}
-                  className="w-full h-64 object-cover rounded-t-lg"
+                  className="w-full h-64 object-contain rounded-t-lg bg-muted"
                 />
               </CardContent>
               <CardFooter className="flex flex-col items-start gap-2 p-4">
@@ -110,8 +156,19 @@ export default function FeaturedProducts() {
                 <ProductRating productId={productId} size="sm" showCount />
                 <div className="flex items-center justify-between w-full">
                   <span className="text-xl font-bold">${product.price}</span>
-                  <Button size="sm" onClick={(e) => handleAddToCart(e, product)}>
-                    Add to Cart
+                  <Button 
+                    size="sm" 
+                    onClick={(e) => handleAddToCart(e, product)}
+                    disabled={
+                      !(product.variants && product.variants.length > 0) &&
+                      (product.stockQuantity === 0 || !product.stockQuantity)
+                    }
+                  >
+                    {product.variants && product.variants.length > 0
+                      ? 'Add to Cart'
+                      : product.stockQuantity === 0 || !product.stockQuantity
+                      ? 'Out of Stock'
+                      : 'Add to Cart'}
                   </Button>
                 </div>
               </CardFooter>
@@ -120,6 +177,14 @@ export default function FeaturedProducts() {
           )
         })}
       </div>
+
+      {/* Variant Selection Modal */}
+      <VariantSelectionModal
+        product={selectedProduct}
+        open={isVariantModalOpen}
+        onOpenChange={setIsVariantModalOpen}
+        onAddToCart={handleVariantAddToCart}
+      />
     </section>
   )
 }

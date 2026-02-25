@@ -119,7 +119,7 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
                           <img
                             src={getFirstImageUrl(product)}
                             alt={product.title}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain"
                           />
                         </div>
                       </td>

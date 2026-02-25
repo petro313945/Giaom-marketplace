@@ -205,14 +205,14 @@ export default function OrderDetail() {
                           <img
                             src={getImageUrl(productImage)}
                             alt={productName}
-                            className="h-20 w-20 rounded-lg object-cover hover:opacity-80 transition-opacity"
+                            className="h-20 w-20 rounded-lg object-contain bg-muted hover:opacity-80 transition-opacity"
                           />
                         </Link>
                       ) : (
                         <img
                           src={getImageUrl(productImage)}
                           alt={productName}
-                          className="h-20 w-20 rounded-lg object-cover"
+                          className="h-20 w-20 rounded-lg object-contain bg-muted"
                         />
                       )}
                       <div className="flex-1">

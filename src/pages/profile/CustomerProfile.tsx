@@ -484,11 +484,11 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                     return (
                       <Card key={item.id} className="overflow-hidden">
                         <Link to={`/product/${productId}`}>
-                          <div className="relative aspect-square overflow-hidden">
+                          <div className="relative aspect-square overflow-hidden bg-muted">
                             <img
                               src={productImage}
                               alt={product.title}
-                              className="w-full h-full object-cover hover:scale-105 transition-transform"
+                              className="w-full h-full object-contain hover:scale-105 transition-transform"
                             />
                           </div>
                         </Link>
