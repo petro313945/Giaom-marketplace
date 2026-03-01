@@ -14,8 +14,9 @@ export interface ConfirmPaymentResponse {
 }
 
 // Create payment intent
-export const createPaymentIntent = async (): Promise<PaymentIntentResponse> => {
-  const response = await api.post<PaymentIntentResponse>('/payment/create-intent');
+export const createPaymentIntent = async (cartItems?: any[]): Promise<PaymentIntentResponse> => {
+  const body = cartItems ? { cartItems } : {};
+  const response = await api.post<PaymentIntentResponse>('/payment/create-intent', body);
   return response.data;
 };
 

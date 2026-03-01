@@ -87,14 +87,6 @@ export default function VariantSelectionModal({
     ))
   }, [product?.variants, selectedSize])
 
-  // Set default color to "Black" if available, otherwise first color (only when modal is open)
-  useEffect(() => {
-    if (open && product && allColors.length > 0 && !selectedColor) {
-      const defaultColor = allColors.find(c => c.toLowerCase() === 'black') || allColors[0]
-      setSelectedColor(defaultColor)
-    }
-  }, [open, product, allColors, selectedColor])
-
   // When size changes, update available colors and reset color if not available
   useEffect(() => {
     if (selectedSize && selectedColor && !availableColors.includes(selectedColor)) {
@@ -139,31 +131,52 @@ export default function VariantSelectionModal({
     }
   }, [product, selectedSize, selectedColor, sizes.length])
 
-  // Reset when modal opens/closes
+  // Reset when modal opens/closes or product changes
   useEffect(() => {
     if (open && product) {
       setDeliveryDates(getDeliveryDates())
-      // Reset selections when opening
+      
+      // Compute defaults from current product state
+      const productSizes = Array.from(new Set(
+        product.variants
+          ?.filter(v => v.size)
+          .map(v => v.size)
+          .filter((size): size is string => !!size) || []
+      ))
+      
+      // Reset selections when opening with a new product
+      const defaultSize = productSizes.length > 0 ? productSizes[0] : ''
+      setSelectedSize(defaultSize)
+      
+      // Compute available colors for the default size (if size exists)
+      let availableColorsForSize: string[] = []
+      if (defaultSize) {
+        availableColorsForSize = Array.from(new Set(
+          product.variants
+            ?.filter(v => v.size === defaultSize && v.stock > 0 && v.color)
+            .map(v => v.color)
+            .filter((color): color is string => !!color) || []
+        ))
+      } else {
+        // If no sizes, use all colors
+        availableColorsForSize = Array.from(new Set(
+          product.variants
+            ?.filter(v => v.color)
+            .map(v => v.color)
+            .filter((color): color is string => !!color) || []
+        ))
+      }
+      
       // Set default color to "Black" if available, otherwise first color
-      if (allColors.length > 0) {
-        const defaultColor = allColors.find(c => c.toLowerCase() === 'black') || allColors[0]
-        setSelectedColor(defaultColor)
-      } else {
-        setSelectedColor('')
-      }
-      // Set default size to first available size
-      if (sizes.length > 0) {
-        setSelectedSize(sizes[0])
-      } else {
-        setSelectedSize('')
-      }
+      const defaultColor = availableColorsForSize.find(c => c.toLowerCase() === 'black') || (availableColorsForSize.length > 0 ? availableColorsForSize[0] : '')
+      setSelectedColor(defaultColor)
     } else if (!open) {
       // Reset when closing
       setSelectedSize('')
       setSelectedColor('')
       setSelectedVariant(null)
     }
-  }, [open, product, allColors, sizes])
+  }, [open, product?._id || product?.id])
 
   if (!product) return null
 

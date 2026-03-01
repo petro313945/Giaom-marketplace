@@ -19,7 +19,8 @@ export interface ShippingAddress {
 
 export interface Order {
   id: string;
-  userId: string;
+  userId?: string;
+  guestEmail?: string;
   user?: {
     id: string;
     email: string;
@@ -42,11 +43,26 @@ export interface Product {
 }
 
 // Create order
-export const createOrder = async (shippingAddress: ShippingAddress, paymentIntentId: string): Promise<{ message: string; order: Order }> => {
-  const response = await api.post<{ message: string; order: Order }>('/orders', {
+export const createOrder = async (
+  shippingAddress: ShippingAddress, 
+  paymentIntentId: string,
+  cartItems?: any[],
+  email?: string
+): Promise<{ message: string; order: Order }> => {
+  const body: any = {
     shippingAddress,
     paymentIntentId,
-  });
+  };
+  
+  if (cartItems) {
+    body.cartItems = cartItems;
+  }
+  
+  if (email) {
+    body.email = email;
+  }
+  
+  const response = await api.post<{ message: string; order: Order }>('/orders', body);
   return response.data;
 };
 

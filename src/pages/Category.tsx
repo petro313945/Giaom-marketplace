@@ -123,17 +123,6 @@ export default function Category() {
     e.preventDefault()
     e.stopPropagation()
     
-    // Check authentication first
-    if (!isAuthenticated) {
-      toast({
-        title: 'Login Required',
-        description: 'Please log in to add items to your cart.',
-        variant: 'default',
-      })
-      navigate('/auth/login')
-      return
-    }
-    
     // If product has variants, open variant selection modal
     if (product.variants && product.variants.length > 0) {
       setSelectedProduct(product)
@@ -163,14 +152,9 @@ export default function Category() {
       const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
       toast({
         title: 'Error',
-        description: errorMessage.includes('log in') 
-          ? 'Please log in to add items to your cart.' 
-          : errorMessage,
+        description: errorMessage,
         variant: 'destructive',
       })
-      if (errorMessage.includes('log in')) {
-        setTimeout(() => navigate('/auth/login'), 1500)
-      }
     }
   }
 
@@ -189,14 +173,9 @@ export default function Category() {
       const errorMessage = error?.message || error?.response?.data?.error || 'Failed to add to cart'
       toast({
         title: 'Error',
-        description: errorMessage.includes('log in') 
-          ? 'Please log in to add items to your cart.' 
-          : errorMessage,
+        description: errorMessage,
         variant: 'destructive',
       })
-      if (errorMessage.includes('log in')) {
-        setTimeout(() => navigate('/auth/login'), 1500)
-      }
     }
   }
 

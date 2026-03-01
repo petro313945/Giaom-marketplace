@@ -57,3 +57,9 @@ export const deleteUser = async (userId: string): Promise<{ message: string }> =
   const response = await api.delete<{ message: string }>(`/users/${userId}`);
   return response.data;
 };
+
+// Reset user password (admin only)
+export const resetUserPassword = async (userId: string, password: string): Promise<{ message: string }> => {
+  const response = await api.put<{ message: string }>(`/users/${userId}/reset-password`, { password });
+  return response.data;
+};

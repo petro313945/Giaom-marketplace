@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { MapPin, Star, Plus, CreditCard } from 'lucide-react'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
 import * as orderService from '../services/orderService'
 import * as addressService from '../services/addressService'
 import * as paymentService from '../services/paymentService'
@@ -27,6 +28,7 @@ import type { Address } from '../services/addressService'
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder')
 
 interface CheckoutFormData {
+  email: string
   fullName: string
   address: string
   city: string
@@ -42,6 +44,8 @@ function PaymentForm({
   total, 
   clientSecret,
   paymentIntentId,
+  cartItems,
+  email,
   onSuccess, 
   onError 
 }: { 
@@ -49,6 +53,8 @@ function PaymentForm({
   total: number
   clientSecret: string
   paymentIntentId: string
+  cartItems?: any[]
+  email?: string
   onSuccess: (orderId: string) => void
   onError: (error: string) => void
 }) {
@@ -90,7 +96,7 @@ function PaymentForm({
 
       if (paymentIntent?.status === 'succeeded') {
         // Create order with payment intent ID
-        const orderResponse = await orderService.createOrder(shippingAddress, paymentIntentId)
+        const orderResponse = await orderService.createOrder(shippingAddress, paymentIntentId, cartItems, email)
         onSuccess(orderResponse.order.id)
       } else {
         onError(`Payment status: ${paymentIntent?.status}`)
@@ -140,6 +146,7 @@ function PaymentForm({
 // Main Checkout Component
 function CheckoutForm() {
   const { cart, loading: cartLoading, clearCart } = useCart()
+  const { isAuthenticated, user } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -154,26 +161,33 @@ function CheckoutForm() {
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<CheckoutFormData>()
 
   useEffect(() => {
-    const fetchAddresses = async () => {
-      setLoadingAddresses(true)
-      try {
-        const response = await addressService.getUserAddresses()
-        setAddresses(response.addresses)
-        const defaultAddress = response.addresses.find(addr => addr.isDefault)
-        if (defaultAddress) {
-          setSelectedAddressId(defaultAddress.id)
-          fillFormWithAddress(defaultAddress)
+    // Only fetch addresses if user is authenticated
+    if (isAuthenticated) {
+      const fetchAddresses = async () => {
+        setLoadingAddresses(true)
+        try {
+          const response = await addressService.getUserAddresses()
+          setAddresses(response.addresses)
+          const defaultAddress = response.addresses.find(addr => addr.isDefault)
+          if (defaultAddress) {
+            setSelectedAddressId(defaultAddress.id)
+            fillFormWithAddress(defaultAddress)
+          }
+        } catch (error) {
+          console.error('Failed to fetch addresses:', error)
+          setUseNewAddress(true)
+        } finally {
+          setLoadingAddresses(false)
         }
-      } catch (error) {
-        console.error('Failed to fetch addresses:', error)
-        setUseNewAddress(true)
-      } finally {
-        setLoadingAddresses(false)
       }
-    }
 
-    fetchAddresses()
-  }, [])
+      fetchAddresses()
+    } else {
+      // For guest users, set email field if available from user object (shouldn't be, but just in case)
+      setLoadingAddresses(false)
+      setUseNewAddress(true)
+    }
+  }, [isAuthenticated])
 
   const fillFormWithAddress = (address: Address) => {
     setValue('fullName', address.fullName)
@@ -249,10 +263,20 @@ function CheckoutForm() {
       phone: data.phone || '',
     }
 
+    // Prepare cart items for guest checkout
+    let cartItemsForPayment: any[] | undefined = undefined;
+    if (!isAuthenticated && cart) {
+      cartItemsForPayment = cart.items.map(item => ({
+        productId: typeof item.productId === 'object' ? item.productId.id : item.productId,
+        quantity: item.quantity,
+        variant: item.variant
+      }));
+    }
+
     // Create payment intent
     try {
       setIsSubmitting(true)
-      const paymentResponse = await paymentService.createPaymentIntent()
+      const paymentResponse = await paymentService.createPaymentIntent(cartItemsForPayment)
       setClientSecret(paymentResponse.clientSecret)
       setPaymentIntentId(paymentResponse.paymentIntentId)
       setShowPayment(true)
@@ -383,6 +407,25 @@ function CheckoutForm() {
                   )}
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {!isAuthenticated && (
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        {...register('email', { 
+                          required: 'Email is required',
+                          pattern: {
+                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                            message: 'Invalid email address'
+                          }
+                        })}
+                      />
+                      {errors.email && (
+                        <p className="text-sm text-destructive">{errors.email.message}</p>
+                      )}
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="fullName">Full Name</Label>
                     <Input
@@ -491,6 +534,12 @@ function CheckoutForm() {
                       total={total}
                       clientSecret={clientSecret}
                       paymentIntentId={paymentIntentId}
+                      cartItems={!isAuthenticated && cart ? cart.items.map(item => ({
+                        productId: typeof item.productId === 'object' ? item.productId.id : item.productId,
+                        quantity: item.quantity,
+                        variant: item.variant
+                      })) : undefined}
+                      email={!isAuthenticated ? watch('email') : undefined}
                       onSuccess={handlePaymentSuccess}
                       onError={handlePaymentError}
                     />

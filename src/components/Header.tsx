@@ -111,6 +111,9 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Cart icon - visible for both authenticated and guest users */}
+          <CartDrawer />
+          
           {isAuthenticated && (
             <>
               {user?.role === 'customer' && (
@@ -130,7 +133,6 @@ export default function Header() {
                   </Button>
                 </>
               )}
-              <CartDrawer />
               <Button variant="ghost" size="icon" asChild>
                 <Link to="/profile">
                   <User className="h-5 w-5" />
@@ -142,14 +144,9 @@ export default function Header() {
             </>
           )}
           {!isAuthenticated && (
-            <>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth/login">Sign In</Link>
-              </Button>
-              <Button size="sm" asChild>
-                <Link to="/auth/sign-up">Sign Up</Link>
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/auth/login">Sign In</Link>
+            </Button>
           )}
         </div>
       </div>

@@ -213,17 +213,6 @@ export default function ProductDetail() {
 
   const handleAddToCart = async () => {
     if (!product) return
-    
-    // Check authentication first
-    if (!isAuthenticated) {
-      toast({
-        title: 'Login Required',
-        description: 'Please log in to add items to your cart.',
-        variant: 'default',
-      })
-      navigate('/auth/login')
-      return
-    }
 
     // If product has variants, require variant selection
     if (product.variants && product.variants.length > 0 && !selectedVariant) {
@@ -253,30 +242,14 @@ export default function ProductDetail() {
       setError(errorMessage)
       toast({
         title: 'Error',
-        description: errorMessage.includes('log in') 
-          ? 'Please log in to add items to your cart.' 
-          : errorMessage,
+        description: errorMessage,
         variant: 'destructive',
       })
-      if (errorMessage.includes('log in')) {
-        setTimeout(() => navigate('/auth/login'), 1500)
-      }
     }
   }
 
   const handleBuyNow = async () => {
     if (!product) return
-    
-    // Check authentication first
-    if (!isAuthenticated) {
-      toast({
-        title: 'Login Required',
-        description: 'Please log in to purchase items.',
-        variant: 'default',
-      })
-      navigate('/auth/login')
-      return
-    }
 
     // If product has variants, require variant selection
     if (product.variants && product.variants.length > 0 && !selectedVariant) {
@@ -302,14 +275,9 @@ export default function ProductDetail() {
       setError(errorMessage)
       toast({
         title: 'Error',
-        description: errorMessage.includes('log in') 
-          ? 'Please log in to purchase items.' 
-          : errorMessage,
+        description: errorMessage,
         variant: 'destructive',
       })
-      if (errorMessage.includes('log in')) {
-        setTimeout(() => navigate('/auth/login'), 1500)
-      }
     }
   }
 
@@ -510,13 +478,13 @@ export default function ProductDetail() {
         <div className="space-y-6">
           <div>
             {/* Seller/Store Name */}
-            {product.sellerId && typeof product.sellerId === 'object' && product.sellerId.fullName && (
+            {product.sellerId && typeof product.sellerId === 'object' && (product.sellerId.businessName || product.sellerId.fullName) && (
               <div className="mb-2">
                 <Link 
                   to="#" 
                   className="text-sm text-primary hover:underline"
                 >
-                  Visit the {product.sellerId.fullName} Store
+                  Visit the {product.sellerId.businessName || product.sellerId.fullName} Store
                 </Link>
               </div>
             )}

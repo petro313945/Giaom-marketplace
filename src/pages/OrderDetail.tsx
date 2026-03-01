@@ -267,6 +267,20 @@ export default function OrderDetail() {
               <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Order Owner */}
+              <div className="border-b pb-4">
+                <p className="text-sm font-medium mb-1">Order Owner</p>
+                <p className="text-sm text-muted-foreground">
+                  {order.guestEmail ? (
+                    <span>Guest ({order.guestEmail})</span>
+                  ) : order.userId ? (
+                    <span>User Account</span>
+                  ) : (
+                    <span>Guest</span>
+                  )}
+                </p>
+              </div>
+
               {/* Order Status Tracking */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">

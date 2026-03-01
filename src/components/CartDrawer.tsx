@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet'
 import { ShoppingCart, Minus, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { getImageUrl } from '../utils/imageUtils'
+import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
 import { useToast } from '@/components/ui/use-toast'
 import {
   AlertDialog,
@@ -63,16 +63,18 @@ export default function CartDrawer() {
                   const productData = typeof product === 'object' ? product : null
                   const productName = productData?.title || 'Product'
                   const productPrice = productData?.price || 0
-                  const productImage = getImageUrl(productData?.imageUrl)
+                  const productImage = getFirstImageUrl(productData)
                   const productId = productData?.id || item.productId
 
                   return (
                     <div key={item.id || productId} className="flex gap-4 border-b pb-4">
-                      <img
-                        src={productImage}
-                        alt={productName}
-                        className="h-20 w-20 rounded-lg object-cover"
-                      />
+                      <div className="w-20 h-20 bg-muted rounded-md overflow-hidden flex-shrink-0">
+                        <img
+                          src={productImage}
+                          alt={productName}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium truncate" title={productName}>{productName}</h3>
                         <p className="text-lg font-bold mt-1">${productPrice.toFixed(2)}</p>

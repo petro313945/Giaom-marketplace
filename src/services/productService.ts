@@ -10,7 +10,7 @@ export interface ProductVariant {
 export interface Product {
   _id: string;
   id?: string; // Alias for _id
-  sellerId: string | { id: string; email: string; fullName?: string };
+  sellerId: string | { id: string; email: string; fullName?: string; businessName?: string };
   title: string;
   description?: string;
   price: number;

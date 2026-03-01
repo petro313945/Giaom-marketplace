@@ -215,7 +215,7 @@ export default function SellerProfile() {
     orders.forEach(order => {
       const orderId = order.id || (order as any)._id || ''
       const orderDate = new Date(order.createdAt)
-      const buyerEmail = order.user?.email || (order as any).user?.email || null
+      const buyerEmail = order.user?.email || (order as any).user?.email || (order as any).guestEmail || null
       
       order.items?.forEach(item => {
         const product = typeof item.productId === 'object' ? item.productId : null

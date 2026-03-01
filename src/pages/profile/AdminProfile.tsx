@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, BarChart3 } from 'lucide-react'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, BarChart3, Key } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -82,7 +82,9 @@ export default function AdminProfile() {
     businessName: '',
     businessDescription: '',
     status: 'pending' as 'pending' | 'approved' | 'rejected',
-    userId: ''
+    userId: '',
+    email: '',
+    fullName: ''
   })
   const [updatingSeller, setUpdatingSeller] = useState(false)
   const [deleteSellerDialogOpen, setDeleteSellerDialogOpen] = useState(false)
@@ -95,6 +97,7 @@ export default function AdminProfile() {
     email: ''
   })
   const [updatingBuyer, setUpdatingBuyer] = useState(false)
+  const [resettingPasswordUserId, setResettingPasswordUserId] = useState<string | null>(null)
   const [statisticsDialogOpen, setStatisticsDialogOpen] = useState(false)
   const [newUser, setNewUser] = useState({
     email: '',
@@ -388,11 +391,15 @@ export default function AdminProfile() {
     setEditingSellerId((seller as any)._id || seller.id)
     const user = seller.userId as any
     const userId = typeof user === 'object' ? (user?._id || user?.id) : user
+    const userEmail = typeof user === 'object' ? (user?.email || '') : ''
+    const userFullName = typeof user === 'object' ? (user?.fullName || '') : ''
     setEditingSeller({
       businessName: seller.businessName,
       businessDescription: seller.businessDescription || '',
       status: seller.status,
-      userId: userId || ''
+      userId: userId || '',
+      email: userEmail,
+      fullName: userFullName
     })
     setEditSellerDialogOpen(true)
   }
@@ -407,14 +414,30 @@ export default function AdminProfile() {
       return
     }
 
-    if (!editingSellerId) return
+    if (!editingSeller.email) {
+      toast({
+        title: 'Validation Error',
+        description: 'Email is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!editingSellerId || !editingSeller.userId) return
 
     setUpdatingSeller(true)
     try {
+      // Update seller profile
       await sellerService.updateSellerProfileAdmin(editingSellerId, {
         businessName: editingSeller.businessName,
         businessDescription: editingSeller.businessDescription || undefined,
         status: editingSeller.status
+      })
+
+      // Update user email and fullName
+      await userService.updateUser(editingSeller.userId, {
+        email: editingSeller.email,
+        fullName: editingSeller.fullName || undefined
       })
 
       // Refresh sellers list
@@ -427,12 +450,14 @@ export default function AdminProfile() {
         businessName: '',
         businessDescription: '',
         status: 'pending',
-        userId: ''
+        userId: '',
+        email: '',
+        fullName: ''
       })
 
       toast({
         title: 'Seller Updated',
-        description: 'Seller profile has been updated successfully.',
+        description: 'Seller profile and user information have been updated successfully.',
         variant: 'default',
       })
     } catch (error: any) {
@@ -543,6 +568,27 @@ export default function AdminProfile() {
     }
   }
 
+  const handleInitPassword = async (userId: string, userName: string) => {
+    setResettingPasswordUserId(userId)
+    try {
+      await userService.resetUserPassword(userId, 'Root123!')
+      toast({
+        title: 'Password Initialized',
+        description: `Password has been reset to "Root123!" for ${userName}.`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to reset password'
+      toast({
+        title: 'Password Reset Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setResettingPasswordUserId(null)
+    }
+  }
+
   const pendingSellers = allSellers.filter((s) => s.status === 'pending')
   const activeSellers = allSellers.filter((s) => s.status === 'approved').length
 
@@ -599,63 +645,30 @@ export default function AdminProfile() {
           <TabsTrigger value="sellers" className="gap-2">
             <Store className="h-4 w-4" />
             All Sellers
-            {pendingSellers.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {pendingSellers.length}
-              </span>
-            )}
           </TabsTrigger>
           <TabsTrigger value="buyers" className="gap-2">
             <ShoppingCart className="h-4 w-4" />
             Buyers
-            <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
-              {allBuyers.length}
-            </span>
           </TabsTrigger>
           <TabsTrigger value="products" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             Products
-            {productStats.pending > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {productStats.pending}
-              </span>
-            )}
           </TabsTrigger>
           <TabsTrigger value="orders" className="gap-2">
             <Package className="h-4 w-4" />
             Orders
-            {orderStats && orderStats.pendingOrders > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {orderStats.pendingOrders}
-              </span>
-            )}
           </TabsTrigger>
           <TabsTrigger value="reviews" className="gap-2">
             <Star className="h-4 w-4" />
             Reviews
-            {allReviews.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {allReviews.length}
-              </span>
-            )}
           </TabsTrigger>
           <TabsTrigger value="reports" className="gap-2">
             <AlertCircle className="h-4 w-4" />
             Reports
-            {pendingReportsCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {pendingReportsCount}
-              </span>
-            )}
           </TabsTrigger>
           <TabsTrigger value="payouts" className="gap-2">
             <Wallet className="h-4 w-4" />
             Payouts
-            {payoutStats && payoutStats.pending > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                {payoutStats.pending}
-              </span>
-            )}
           </TabsTrigger>
         </TabsList>
 
@@ -711,6 +724,7 @@ export default function AdminProfile() {
                       {paginatedSellers.map((seller, index) => {
                         const sellerId = (seller as any)._id || seller.id
                         const user = seller.userId as any
+                        const userId = typeof user === 'object' ? (user?._id || user?.id) : user
                         const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
                         const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
                         const userRole = typeof user === 'object' ? (user?.role || 'N/A') : 'N/A'
@@ -735,6 +749,20 @@ export default function AdminProfile() {
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (userId) {
+                                      handleInitPassword(userId, userName)
+                                    }
+                                  }}
+                                  disabled={!userId || resettingPasswordUserId === userId}
+                                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                >
+                                  <Key className="h-4 w-4 mr-1" />
+                                  {resettingPasswordUserId === userId ? 'Resetting...' : 'Init Password'}
+                                </Button>
                                 <Button
                                   variant="default"
                                   size="sm"
@@ -855,6 +883,16 @@ export default function AdminProfile() {
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleInitPassword(buyerId, buyerName)}
+                                  disabled={resettingPasswordUserId === buyerId}
+                                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                >
+                                  <Key className="h-4 w-4 mr-1" />
+                                  {resettingPasswordUserId === buyerId ? 'Resetting...' : 'Init Password'}
+                                </Button>
                                 <Button
                                   variant="default"
                                   size="sm"
@@ -1123,7 +1161,10 @@ export default function AdminProfile() {
                       {paginatedOrders.map((order, index) => {
                         const orderId = order._id || order.id
                         const user = order.userId as any
-                        const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+                        const isGuestOrder = !order.userId || (order as any).guestEmail
+                        const userEmail = isGuestOrder 
+                          ? `Guest${(order as any).guestEmail ? ` (${(order as any).guestEmail})` : ''}`
+                          : (typeof user === 'object' ? (user?.email || 'N/A') : 'N/A')
                         const rowNo = (ordersPagination.page - 1) * ordersPagination.perPage + index + 1
 
                         return (
@@ -2191,6 +2232,27 @@ export default function AdminProfile() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
+              <label className="text-sm font-medium mb-1 block">Full Name</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="Seller's full name"
+                value={editingSeller.fullName}
+                onChange={(e) => setEditingSeller({ ...editingSeller, fullName: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Email *</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="seller@example.com"
+                value={editingSeller.email}
+                onChange={(e) => setEditingSeller({ ...editingSeller, email: e.target.value })}
+                required
+              />
+            </div>
+            <div>
               <label className="text-sm font-medium mb-1 block">Business Name *</label>
               <input
                 type="text"
@@ -2239,7 +2301,9 @@ export default function AdminProfile() {
                   businessName: '',
                   businessDescription: '',
                   status: 'pending',
-                  userId: ''
+                  userId: '',
+                  email: '',
+                  fullName: ''
                 })
               }}
             >
@@ -2247,7 +2311,7 @@ export default function AdminProfile() {
             </Button>
             <Button
               onClick={handleUpdateSeller}
-              disabled={updatingSeller || !editingSeller.businessName}
+              disabled={updatingSeller || !editingSeller.businessName || !editingSeller.email}
             >
               {updatingSeller ? 'Updating...' : 'Update Seller'}
             </Button>

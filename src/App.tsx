@@ -42,14 +42,7 @@ function App() {
               <Route path="/auth/sign-up" element={<Signup />} />
               <Route path="/auth/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route 
-                path="/checkout" 
-                element={
-                  <ProtectedRoute>
-                    <Checkout />
-                  </ProtectedRoute>
-                } 
-              />
+              <Route path="/checkout" element={<Checkout />} />
               <Route 
                 path="/become-seller" 
                 element={
