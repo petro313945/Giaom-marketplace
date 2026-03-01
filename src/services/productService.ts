@@ -79,7 +79,7 @@ export const createProduct = async (data: CreateProductData): Promise<{ message:
 };
 
 // Get seller's products (with pagination)
-export const getSellerProducts = async (params?: { page?: number; limit?: number }): Promise<ProductsResponse> => {
+export const getSellerProducts = async (params?: { page?: number; limit?: number; sortBy?: string; sortOrder?: 'asc' | 'desc' }): Promise<ProductsResponse> => {
   const response = await api.get<{ products: Product[]; pagination: ProductsResponse['pagination'] }>('/products/seller/my-products', { params });
   return {
     products: response.data.products,

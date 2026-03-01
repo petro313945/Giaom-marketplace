@@ -64,3 +64,23 @@ export const rejectSeller = async (sellerId: string): Promise<{ message: string;
   const response = await api.put<{ message: string; sellerProfile: SellerProfile }>(`/sellers/${sellerId}/reject`);
   return response.data;
 };
+
+// Update seller profile (admin only)
+export const updateSellerProfileAdmin = async (
+  sellerId: string,
+  data: {
+    businessName?: string;
+    businessDescription?: string;
+    status?: 'pending' | 'approved' | 'rejected';
+    userId?: string;
+  }
+): Promise<{ message: string; sellerProfile: SellerProfile }> => {
+  const response = await api.put<{ message: string; sellerProfile: SellerProfile }>(`/sellers/${sellerId}`, data);
+  return response.data;
+};
+
+// Delete seller (admin only)
+export const deleteSeller = async (sellerId: string): Promise<{ message: string }> => {
+  const response = await api.delete<{ message: string }>(`/sellers/${sellerId}`);
+  return response.data;
+};

@@ -21,10 +21,29 @@ export const updateUserProfile = async (data: { fullName?: string }): Promise<{ 
   return response.data;
 };
 
+// Create user (admin only)
+export const createUser = async (data: {
+  email: string;
+  password: string;
+  fullName?: string;
+  role: 'customer' | 'seller' | 'admin';
+  businessName?: string;
+  businessDescription?: string;
+}): Promise<{ message: string; user: User }> => {
+  const response = await api.post<{ message: string; user: User; sellerProfile?: any }>('/users', data);
+  return response.data;
+};
+
 // Get all users (admin only)
 export const getAllUsers = async (): Promise<User[]> => {
   const response = await api.get<{ users: User[] }>('/users');
   return response.data.users;
+};
+
+// Update user (admin only)
+export const updateUser = async (userId: string, data: { fullName?: string; email?: string }): Promise<{ message: string; user: User }> => {
+  const response = await api.put<{ message: string; user: User }>(`/users/${userId}`, data);
+  return response.data;
 };
 
 // Change user role (admin only)

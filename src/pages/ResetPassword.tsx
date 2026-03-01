@@ -21,9 +21,19 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [token, setToken] = useState<string | null>(null)
+  const [checkingToken, setCheckingToken] = useState(true)
   const { register, handleSubmit, formState: { errors }, watch } = useForm<ResetPasswordFormData>()
 
   useEffect(() => {
+    // Normalize URL if it has double slashes
+    const currentPath = window.location.pathname
+    if (currentPath.includes('//')) {
+      const normalizedPath = currentPath.replace(/\/+/g, '/')
+      if (normalizedPath !== currentPath) {
+        window.history.replaceState({}, '', normalizedPath + window.location.search)
+      }
+    }
+
     const tokenParam = searchParams.get('token')
     if (!tokenParam) {
       toast({
@@ -32,9 +42,12 @@ export default function ResetPassword() {
         variant: 'destructive',
       })
       navigate('/auth/forgot-password')
-    } else {
-      setToken(tokenParam)
+      setCheckingToken(false)
+      return
     }
+    
+    setToken(tokenParam)
+    setCheckingToken(false)
   }, [searchParams, navigate, toast])
 
   const newPassword = watch('newPassword')
@@ -82,6 +95,18 @@ export default function ResetPassword() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (checkingToken) {
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-md">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">Loading...</div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!token) {

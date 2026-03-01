@@ -175,6 +175,32 @@ export default function ProductDetail() {
     fetchReviewData()
   }, [product, isAuthenticated])
 
+  // Set default variant when product loads
+  useEffect(() => {
+    if (!product) {
+      setSelectedVariant(null)
+      return
+    }
+
+    if (!product.variants || product.variants.length === 0) {
+      setSelectedVariant(null)
+      return
+    }
+
+    // Select the first available variant with stock, or first variant if all are out of stock
+    const inStockVariant = product.variants.find(v => v.stock > 0)
+    const defaultVariant = inStockVariant || product.variants[0]
+
+    if (defaultVariant) {
+      const variant: { size?: string; color?: string } = {}
+      if (defaultVariant.size) variant.size = defaultVariant.size
+      if (defaultVariant.color) variant.color = defaultVariant.color
+      setSelectedVariant(Object.keys(variant).length > 0 ? variant : null)
+    } else {
+      setSelectedVariant(null)
+    }
+  }, [product, id])
+
   // Adjust quantity when available stock changes
   useEffect(() => {
     const availableStock = getAvailableStock()
@@ -579,7 +605,7 @@ export default function ProductDetail() {
                         variant={selectedVariant?.size === size ? "default" : "outline"}
                         size="sm"
                         onClick={() => {
-                          setSelectedVariant({ ...selectedVariant, size })
+                          setSelectedVariant({ ...(selectedVariant || {}), size })
                           setQuantity(1)
                         }}
                       >
@@ -607,7 +633,7 @@ export default function ProductDetail() {
                         variant={selectedVariant?.color === color ? "default" : "outline"}
                         size="sm"
                         onClick={() => {
-                          setSelectedVariant({ ...selectedVariant, color })
+                          setSelectedVariant({ ...(selectedVariant || {}), color })
                           setQuantity(1)
                         }}
                       >

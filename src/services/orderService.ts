@@ -20,6 +20,11 @@ export interface ShippingAddress {
 export interface Order {
   id: string;
   userId: string;
+  user?: {
+    id: string;
+    email: string;
+    fullName?: string;
+  };
   items: OrderItem[];
   totalAmount: number;
   shippingAddress: ShippingAddress;

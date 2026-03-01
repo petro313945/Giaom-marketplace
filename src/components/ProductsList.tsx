@@ -2,8 +2,14 @@ import { useState } from 'react'
 import { Edit, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -23,10 +29,13 @@ interface ProductsListProps {
   pagination?: { page: number; pages: number; total: number; limit?: number }
   onProductUpdated?: () => void
   onPageChange?: (page: number) => void
+  onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
   headerAction?: React.ReactNode
 }
 
-export default function ProductsList({ products, pagination, onProductUpdated, onPageChange, headerAction }: ProductsListProps) {
+export default function ProductsList({ products, pagination, onProductUpdated, onPageChange, onSortChange, sortBy = 'createdAt', sortOrder = 'desc', headerAction }: ProductsListProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -89,7 +98,36 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
             <CardTitle>My Products</CardTitle>
             <CardDescription>Manage your product listings</CardDescription>
           </div>
-          {headerAction}
+          <div className="flex items-center gap-2">
+            {onSortChange && (
+              <div className="flex items-center gap-2">
+                <Select
+                  value={`${sortBy}-${sortOrder}`}
+                  onValueChange={(value) => {
+                    const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                    onSortChange(newSortBy, newSortOrder)
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="createdAt-desc">Newest First</SelectItem>
+                    <SelectItem value="createdAt-asc">Oldest First</SelectItem>
+                    <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                    <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                    <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                    <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                    <SelectItem value="stockQuantity-desc">Stock (High to Low)</SelectItem>
+                    <SelectItem value="stockQuantity-asc">Stock (Low to High)</SelectItem>
+                    <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                    <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {headerAction}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-lg border">
@@ -111,6 +149,10 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
                   const productId = product._id || product.id || ''
                   const limit = pagination?.limit ?? (pagination?.pages ? Math.ceil((pagination?.total ?? 0) / pagination.pages) : 10)
                   const rowNo = ((pagination?.page ?? 1) - 1) * limit + index + 1
+                  // Calculate total stock: sum of variant stocks if variants exist, otherwise use stockQuantity
+                  const totalStock = product.variants && product.variants.length > 0
+                    ? product.variants.reduce((sum, variant) => sum + (variant.stock || 0), 0)
+                    : (product.stockQuantity ?? 0)
                   return (
                     <tr key={productId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="h-16 px-4 align-middle font-medium">{rowNo}</td>
@@ -129,35 +171,15 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
                       <td className="h-16 px-4 align-middle">${product.price}</td>
                       <td className="h-16 px-4 align-middle">{product.category}</td>
                       <td className="h-16 px-4 align-middle">
-                        <Badge
-                          variant={
-                            (product.stockQuantity ?? 0) === 0
-                              ? 'destructive'
-                              : (product.stockQuantity ?? 0) < 10
-                                ? 'secondary'
-                                : 'default'
-                          }
-                        >
-                          {(product.stockQuantity ?? 0) === 0 ? 'Out of Stock' : `${product.stockQuantity} in stock`}
-                        </Badge>
+                        {totalStock === 0 ? 'Out of Stock' : `${totalStock} in stock`}
                       </td>
                       <td className="h-16 px-4 align-middle">
-                        <Badge
-                          variant={
-                            product.status === 'approved'
-                              ? 'default'
-                              : product.status === 'pending'
-                                ? 'secondary'
-                                : 'destructive'
-                          }
-                        >
-                          {product.status}
-                        </Badge>
+                        {product.status}
                       </td>
                       <td className="h-16 px-4 align-middle text-right">
                         <div className="flex gap-2 justify-end">
                           <Button
-                            variant="outline"
+                            variant="default"
                             size="sm"
                             onClick={() => handleEdit(product)}
                           >

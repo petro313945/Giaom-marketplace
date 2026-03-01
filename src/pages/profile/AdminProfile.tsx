@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -16,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, BarChart3 } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -27,18 +28,22 @@ import * as payoutService from '../../services/payoutService'
 import RatingDisplay from '../../components/RatingDisplay'
 import { getFirstImageUrl } from '../../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
+import { useAuth } from '../../context/AuthContext'
 
 export default function AdminProfile() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [sellersPagination, setSellersPagination] = useState({ page: 1, perPage: 10 })
-  const [usersPagination, setUsersPagination] = useState({ page: 1, perPage: 10 })
+  const [buyersPagination, setBuyersPagination] = useState({ page: 1, perPage: 10 })
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, perPage: 10 })
   const [allProducts, setAllProducts] = useState<any[]>([])
   const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
   const [productStats, setProductStats] = useState({ total: 0, pending: 0 })
+  const [productsSortBy, setProductsSortBy] = useState<string>('createdAt')
+  const [productsSortOrder, setProductsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [allOrders, setAllOrders] = useState<any[]>([])
   const [orderStats, setOrderStats] = useState<{ totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number } | null>(null)
   const [allReviews, setAllReviews] = useState<any[]>([])
@@ -54,6 +59,10 @@ export default function AdminProfile() {
   const [reportAdminNotes, setReportAdminNotes] = useState<{ [key: string]: string }>({})
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
+  const [editReportDialogOpen, setEditReportDialogOpen] = useState(false)
+  const [editingReportStatus, setEditingReportStatus] = useState<'pending' | 'resolved' | 'dismissed'>('pending')
+  const [editingReportNotes, setEditingReportNotes] = useState<string>('')
+  const [updatingReportId, setUpdatingReportId] = useState<string | null>(null)
   const [allPayouts, setAllPayouts] = useState<payoutService.Payout[]>([])
   const [payoutsPagination, setPayoutsPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
   const [payoutStatusFilter, setPayoutStatusFilter] = useState<string>('all')
@@ -64,11 +73,70 @@ export default function AdminProfile() {
   const [payoutStatusUpdate, setPayoutStatusUpdate] = useState<{ status: string; failureReason?: string }>({ status: '' })
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false)
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [isCreatingSeller, setIsCreatingSeller] = useState(false)
+  const [editingSellerId, setEditingSellerId] = useState<string | null>(null)
+  const [editSellerDialogOpen, setEditSellerDialogOpen] = useState(false)
+  const [editingSeller, setEditingSeller] = useState({
+    businessName: '',
+    businessDescription: '',
+    status: 'pending' as 'pending' | 'approved' | 'rejected',
+    userId: ''
+  })
+  const [updatingSeller, setUpdatingSeller] = useState(false)
+  const [deleteSellerDialogOpen, setDeleteSellerDialogOpen] = useState(false)
+  const [sellerToDelete, setSellerToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [deletingSeller, setDeletingSeller] = useState(false)
+  const [editingBuyerId, setEditingBuyerId] = useState<string | null>(null)
+  const [editBuyerDialogOpen, setEditBuyerDialogOpen] = useState(false)
+  const [editingBuyer, setEditingBuyer] = useState({
+    fullName: '',
+    email: ''
+  })
+  const [updatingBuyer, setUpdatingBuyer] = useState(false)
+  const [statisticsDialogOpen, setStatisticsDialogOpen] = useState(false)
+  const [newUser, setNewUser] = useState({
+    email: '',
+    password: '',
+    fullName: '',
+    role: 'customer' as 'customer' | 'seller' | 'admin',
+    businessName: '',
+    businessDescription: ''
+  })
 
   const fetchProducts = async (page = 1) => {
     const response = await productService.getAllProducts({ page, limit: 10 })
     setAllProducts(response.products)
     setProductsPagination(response.pagination)
+  }
+
+  // Get sorted products
+  const getSortedProducts = () => {
+    const sorted = [...allProducts].sort((a, b) => {
+      let comparison = 0
+      switch (productsSortBy) {
+        case 'title':
+          comparison = (a.title || '').localeCompare(b.title || '')
+          break
+        case 'price':
+          comparison = (a.price || 0) - (b.price || 0)
+          break
+        case 'category':
+          comparison = (a.category || '').localeCompare(b.category || '')
+          break
+        case 'status':
+          comparison = (a.status || '').localeCompare(b.status || '')
+          break
+        case 'createdAt':
+          comparison = new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+          break
+        default:
+          return 0
+      }
+      return productsSortOrder === 'asc' ? comparison : -comparison
+    })
+    return sorted
   }
 
   const fetchReviews = async (page = 1) => {
@@ -246,8 +314,241 @@ export default function AdminProfile() {
     }
   }
 
+  const handleCreateUser = async () => {
+    if (!newUser.email || !newUser.password) {
+      toast({
+        title: 'Validation Error',
+        description: 'Email and password are required.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Ensure role is 'seller' when creating from All Sellers section
+    const userRole = isCreatingSeller ? 'seller' : newUser.role
+
+    if ((isCreatingSeller || newUser.role === 'seller') && !newUser.businessName) {
+      toast({
+        title: 'Validation Error',
+        description: 'Business name is required for seller accounts.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setCreatingUser(true)
+    try {
+      const response = await userService.createUser({
+        email: newUser.email,
+        password: newUser.password,
+        fullName: newUser.fullName || undefined,
+        role: userRole,
+        businessName: (isCreatingSeller || newUser.role === 'seller') ? newUser.businessName : undefined,
+        businessDescription: (isCreatingSeller || newUser.role === 'seller') ? newUser.businessDescription : undefined
+      })
+
+      // Refresh users and sellers lists
+      const [users, sellers] = await Promise.all([
+        userService.getAllUsers(),
+        sellerService.getAllSellers()
+      ])
+      setAllUsers(users)
+      setAllSellers(sellers)
+
+      // Reset form
+      setNewUser({
+        email: '',
+        password: '',
+        fullName: '',
+        role: 'customer',
+        businessName: '',
+        businessDescription: ''
+      })
+      setIsCreatingSeller(false)
+      setCreateUserDialogOpen(false)
+
+      toast({
+        title: 'User Created',
+        description: response.message || 'User has been created successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to create user'
+      toast({
+        title: 'Creation Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  const handleEditSeller = (seller: any) => {
+    setEditingSellerId((seller as any)._id || seller.id)
+    const user = seller.userId as any
+    const userId = typeof user === 'object' ? (user?._id || user?.id) : user
+    setEditingSeller({
+      businessName: seller.businessName,
+      businessDescription: seller.businessDescription || '',
+      status: seller.status,
+      userId: userId || ''
+    })
+    setEditSellerDialogOpen(true)
+  }
+
+  const handleUpdateSeller = async () => {
+    if (!editingSeller.businessName) {
+      toast({
+        title: 'Validation Error',
+        description: 'Business name is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!editingSellerId) return
+
+    setUpdatingSeller(true)
+    try {
+      await sellerService.updateSellerProfileAdmin(editingSellerId, {
+        businessName: editingSeller.businessName,
+        businessDescription: editingSeller.businessDescription || undefined,
+        status: editingSeller.status
+      })
+
+      // Refresh sellers list
+      const sellers = await sellerService.getAllSellers()
+      setAllSellers(sellers)
+
+      setEditSellerDialogOpen(false)
+      setEditingSellerId(null)
+      setEditingSeller({
+        businessName: '',
+        businessDescription: '',
+        status: 'pending',
+        userId: ''
+      })
+
+      toast({
+        title: 'Seller Updated',
+        description: 'Seller profile has been updated successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to update seller'
+      toast({
+        title: 'Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingSeller(false)
+    }
+  }
+
+  const handleDeleteSeller = (sellerId: string, sellerName: string) => {
+    setSellerToDelete({ id: sellerId, name: sellerName })
+    setDeleteSellerDialogOpen(true)
+  }
+
+  const handleDeleteSellerConfirm = async () => {
+    if (!sellerToDelete) return
+
+    setDeletingSeller(true)
+    try {
+      await sellerService.deleteSeller(sellerToDelete.id)
+      
+      // Refresh both sellers and users lists since we're deleting the user account too
+      const [sellers, users] = await Promise.all([
+        sellerService.getAllSellers(),
+        userService.getAllUsers()
+      ])
+      setAllSellers(sellers)
+      setAllUsers(users)
+      
+      setDeleteSellerDialogOpen(false)
+      setSellerToDelete(null)
+      toast({
+        title: 'Seller Deleted',
+        description: 'The seller and owner account have been deleted successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to delete seller'
+      toast({
+        title: 'Deletion Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingSeller(false)
+    }
+  }
+
+  const handleEditBuyer = (buyer: any) => {
+    const buyerId = (buyer as any)._id || buyer.id
+    setEditingBuyerId(buyerId)
+    setEditingBuyer({
+      fullName: buyer.fullName || '',
+      email: buyer.email || ''
+    })
+    setEditBuyerDialogOpen(true)
+  }
+
+  const handleUpdateBuyer = async () => {
+    if (!editingBuyer.email) {
+      toast({
+        title: 'Validation Error',
+        description: 'Email is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!editingBuyerId) return
+
+    setUpdatingBuyer(true)
+    try {
+      await userService.updateUser(editingBuyerId, {
+        fullName: editingBuyer.fullName || undefined,
+        email: editingBuyer.email
+      })
+
+      // Refresh users list
+      const users = await userService.getAllUsers()
+      setAllUsers(users)
+
+      setEditBuyerDialogOpen(false)
+      setEditingBuyerId(null)
+      setEditingBuyer({
+        fullName: '',
+        email: ''
+      })
+
+      toast({
+        title: 'Buyer Updated',
+        description: 'Buyer profile has been updated successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to update buyer'
+      toast({
+        title: 'Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingBuyer(false)
+    }
+  }
+
   const pendingSellers = allSellers.filter((s) => s.status === 'pending')
   const activeSellers = allSellers.filter((s) => s.status === 'approved').length
+
+  // Separate buyers (customers) and sellers from all users
+  const allBuyers = allUsers.filter((u) => u.role === 'customer')
+  const allSellersFromUsers = allUsers.filter((u) => u.role === 'seller')
 
   const sellersTotalPages = Math.ceil(allSellers.length / sellersPagination.perPage) || 1
   const paginatedSellers = allSellers.slice(
@@ -255,10 +556,10 @@ export default function AdminProfile() {
     sellersPagination.page * sellersPagination.perPage
   )
 
-  const usersTotalPages = Math.ceil(allUsers.length / usersPagination.perPage) || 1
-  const paginatedUsers = allUsers.slice(
-    (usersPagination.page - 1) * usersPagination.perPage,
-    usersPagination.page * usersPagination.perPage
+  const buyersTotalPages = Math.ceil(allBuyers.length / buyersPagination.perPage) || 1
+  const paginatedBuyers = allBuyers.slice(
+    (buyersPagination.page - 1) * buyersPagination.perPage,
+    buyersPagination.page * buyersPagination.perPage
   )
 
   const ordersTotalPages = Math.ceil(allOrders.length / ordersPagination.perPage) || 1
@@ -270,69 +571,46 @@ export default function AdminProfile() {
   return (
     <div className="container py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Manage the entire marketplace</p>
-      </div>
-
-      <div className="grid md:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{allUsers.length}</div>
-            <p className="text-xs text-muted-foreground">Registered accounts</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Active Sellers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeSellers}</div>
-            <p className="text-xs text-muted-foreground">{pendingSellers.length} pending approval</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{productStats.total}</div>
-            <p className="text-xs text-muted-foreground">{productStats.pending} pending review</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Total Revenue
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${orderStats ? orderStats.totalRevenue.toFixed(2) : '0.00'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {orderStats ? `${orderStats.totalOrders} orders` : 'No orders yet'}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-3xl font-bold">
+              Admin Dashboard
+              {user?.email && (
+                <span className="text-base font-normal text-muted-foreground ml-2">
+                  {user.email}
+                </span>
+              )}
+            </h1>
+          </div>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setStatisticsDialogOpen(true)}
+            className="gap-2"
+          >
+            <BarChart3 className="h-4 w-4" />
+            View Statistic
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="sellers" className="space-y-6">
         <TabsList>
           <TabsTrigger value="sellers" className="gap-2">
             <Store className="h-4 w-4" />
-            Sellers
+            All Sellers
             {pendingSellers.length > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
                 {pendingSellers.length}
               </span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="buyers" className="gap-2">
+            <ShoppingCart className="h-4 w-4" />
+            Buyers
+            <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
+              {allBuyers.length}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="products" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
@@ -342,10 +620,6 @@ export default function AdminProfile() {
                 {productStats.pending}
               </span>
             )}
-          </TabsTrigger>
-          <TabsTrigger value="users" className="gap-2">
-            <Users className="h-4 w-4" />
-            Users
           </TabsTrigger>
           <TabsTrigger value="orders" className="gap-2">
             <Package className="h-4 w-4" />
@@ -388,8 +662,30 @@ export default function AdminProfile() {
         <TabsContent value="sellers" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Seller Applications</CardTitle>
-              <CardDescription>Review and approve seller applications</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>All Sellers</CardTitle>
+                  <CardDescription>View and manage all sellers - review and approve seller applications</CardDescription>
+                </div>
+                <Button
+                  onClick={() => {
+                    setNewUser({
+                      email: '',
+                      password: '',
+                      fullName: '',
+                      role: 'seller',
+                      businessName: '',
+                      businessDescription: ''
+                    })
+                    setIsCreatingSeller(true)
+                    setCreateUserDialogOpen(true)
+                  }}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Seller
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -403,9 +699,9 @@ export default function AdminProfile() {
                       <tr className="border-b bg-muted/50">
                         <th className="px-4 py-3 text-left font-medium w-12">No.</th>
                         <th className="px-4 py-3 text-left font-medium">Business Name</th>
-                        <th className="px-4 py-3 text-left font-medium">Description</th>
                         <th className="px-4 py-3 text-left font-medium">Owner</th>
                         <th className="px-4 py-3 text-left font-medium">Email</th>
+                        <th className="px-4 py-3 text-left font-medium">Role</th>
                         <th className="px-4 py-3 text-left font-medium">Status</th>
                         <th className="px-4 py-3 text-left font-medium">Applied</th>
                         <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -417,98 +713,45 @@ export default function AdminProfile() {
                         const user = seller.userId as any
                         const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
                         const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
+                        const userRole = typeof user === 'object' ? (user?.role || 'N/A') : 'N/A'
                         const rowNo = (sellersPagination.page - 1) * sellersPagination.perPage + index + 1
 
                         return (
                           <tr key={sellerId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                             <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
                             <td className="px-4 py-3 font-medium">{seller.businessName}</td>
-                            <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate" title={seller.businessDescription}>
-                              {seller.businessDescription || '—'}
-                            </td>
                             <td className="px-4 py-3">{userName}</td>
                             <td className="px-4 py-3 text-muted-foreground">{userEmail}</td>
                             <td className="px-4 py-3">
-                              <Badge
-                                variant={
-                                  seller.status === 'approved' ? 'default' :
-                                  seller.status === 'rejected' ? 'destructive' :
-                                  'secondary'
-                                }
-                                className="capitalize"
-                              >
-                                {seller.status}
+                              <Badge variant="outline" className="capitalize">
+                                {userRole}
                               </Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="capitalize">{seller.status}</span>
                             </td>
                             <td className="px-4 py-3 text-muted-foreground">
                               {new Date(seller.createdAt).toLocaleDateString()}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
-                                {seller.status !== 'approved' && (
-                                  <Button
-                                    size="sm"
-                                    onClick={async () => {
-                                      try {
-                                        await sellerService.approveSeller(sellerId)
-                                        setAllSellers((prev) =>
-                                          prev.map((s) => {
-                                            const sId = (s as any)._id || s.id
-                                            return sId === sellerId ? { ...s, status: 'approved' } : s
-                                          })
-                                        )
-                                        toast({
-                                          title: 'Seller Approved',
-                                          description: 'The seller has been approved and can now sell products.',
-                                          variant: 'default',
-                                        })
-                                      } catch (error: any) {
-                                        const errorMessage = error?.response?.data?.error || 'Failed to approve seller'
-                                        toast({
-                                          title: 'Approval Failed',
-                                          description: errorMessage,
-                                          variant: 'destructive',
-                                        })
-                                      }
-                                    }}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    Approve
-                                  </Button>
-                                )}
-                                {seller.status !== 'rejected' && (
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={async () => {
-                                      try {
-                                        await sellerService.rejectSeller(sellerId)
-                                        setAllSellers((prev) =>
-                                          prev.map((s) => {
-                                            const sId = (s as any)._id || s.id
-                                            return sId === sellerId ? { ...s, status: 'rejected' } : s
-                                          })
-                                        )
-                                        toast({
-                                          title: 'Seller Rejected',
-                                          description: seller.status === 'approved'
-                                            ? 'Seller approval has been revoked.'
-                                            : 'The seller application has been rejected.',
-                                          variant: 'default',
-                                        })
-                                      } catch (error: any) {
-                                        const errorMessage = error?.response?.data?.error || 'Failed to reject seller'
-                                        toast({
-                                          title: 'Rejection Failed',
-                                          description: errorMessage,
-                                          variant: 'destructive',
-                                        })
-                                      }
-                                    }}
-                                  >
-                                    Reject
-                                  </Button>
-                                )}
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleEditSeller(seller)}
+                                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteSeller(sellerId, seller.businessName)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Delete
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -545,11 +788,159 @@ export default function AdminProfile() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="buyers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>All Buyers</CardTitle>
+                  <CardDescription>View and manage all customer accounts (buyers)</CardDescription>
+                </div>
+                <Button
+                  onClick={() => {
+                    setNewUser({
+                      email: '',
+                      password: '',
+                      fullName: '',
+                      role: 'customer',
+                      businessName: '',
+                      businessDescription: ''
+                    })
+                    setIsCreatingSeller(false)
+                    setCreateUserDialogOpen(true)
+                  }}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Buyer
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-muted-foreground">Loading buyers...</p>
+              ) : allBuyers.length === 0 ? (
+                <p className="text-muted-foreground">No buyers yet</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
+                        <th className="px-4 py-3 text-left font-medium">Name</th>
+                        <th className="px-4 py-3 text-left font-medium">Email</th>
+                        <th className="px-4 py-3 text-left font-medium">Role</th>
+                        <th className="px-4 py-3 text-left font-medium">Joined</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedBuyers.map((buyer, index) => {
+                        const buyerId = (buyer as any)._id || buyer.id
+                        const buyerName = (buyer as any).fullName || buyer.name || buyer.email || 'N/A'
+                        const rowNo = (buyersPagination.page - 1) * buyersPagination.perPage + index + 1
+
+                        return (
+                          <tr key={buyerId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                            <td className="px-4 py-3 font-medium">{buyerName}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{buyer.email}</td>
+                            <td className="px-4 py-3">
+                              <Badge variant="outline" className="capitalize">
+                                {buyer.role}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {new Date(buyer.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleEditBuyer(buyer)}
+                                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(buyerId, buyerName)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Delete
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {allBuyers.length > 0 && allBuyers.length > buyersPagination.perPage && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={buyersPagination.page <= 1}
+                    onClick={() => setBuyersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {buyersPagination.page} of {buyersTotalPages} ({allBuyers.length} total)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={buyersPagination.page >= buyersTotalPages}
+                    onClick={() => setBuyersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="products" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Product Approvals</CardTitle>
-              <CardDescription>Review and approve product listings</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Product Approvals</CardTitle>
+                  <CardDescription>Review and approve product listings</CardDescription>
+                </div>
+                <Select
+                  value={`${productsSortBy}-${productsSortOrder}`}
+                  onValueChange={(value) => {
+                    const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                    setProductsSortBy(newSortBy)
+                    setProductsSortOrder(newSortOrder)
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="createdAt-desc">Date (Newest First)</SelectItem>
+                    <SelectItem value="createdAt-asc">Date (Oldest First)</SelectItem>
+                    <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                    <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                    <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                    <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                    <SelectItem value="category-asc">Category (A-Z)</SelectItem>
+                    <SelectItem value="category-desc">Category (Z-A)</SelectItem>
+                    <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                    <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -564,17 +955,15 @@ export default function AdminProfile() {
                         <th className="px-4 py-3 text-left font-medium w-12">No.</th>
                         <th className="px-4 py-3 text-left font-medium w-16">Image</th>
                         <th className="px-4 py-3 text-left font-medium">Title</th>
-                        <th className="px-4 py-3 text-left font-medium">Description</th>
                         <th className="px-4 py-3 text-left font-medium">Price</th>
                         <th className="px-4 py-3 text-left font-medium">Category</th>
                         <th className="px-4 py-3 text-left font-medium">Seller</th>
                         <th className="px-4 py-3 text-left font-medium">Status</th>
-                        <th className="px-4 py-3 text-left font-medium">Created</th>
                         <th className="px-4 py-3 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {allProducts.map((product, index) => {
+                      {getSortedProducts().map((product, index) => {
                         const productId = product._id || product.id
                         const seller = product.sellerId as any
                         const sellerName = typeof seller === 'object' ? (seller?.fullName || seller?.email || 'N/A') : 'N/A'
@@ -594,26 +983,11 @@ export default function AdminProfile() {
                             <td className="px-4 py-3 font-medium max-w-[180px]" title={product.title}>
                               <span className="line-clamp-2">{product.title}</span>
                             </td>
-                            <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate" title={product.description}>
-                              {product.description || '—'}
-                            </td>
                             <td className="px-4 py-3 font-medium text-primary">${product.price?.toFixed(2) ?? '0.00'}</td>
                             <td className="px-4 py-3 text-muted-foreground">{product.category || '—'}</td>
                             <td className="px-4 py-3 text-muted-foreground">{sellerName}</td>
                             <td className="px-4 py-3">
-                              <Badge
-                                variant={
-                                  product.status === 'approved' ? 'default' :
-                                  product.status === 'rejected' ? 'destructive' :
-                                  'secondary'
-                                }
-                                className="capitalize"
-                              >
-                                {product.status}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">
-                              {new Date(product.createdAt).toLocaleDateString()}
+                              <span className="capitalize">{product.status}</span>
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
@@ -719,178 +1093,7 @@ export default function AdminProfile() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>Manage all user accounts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <p className="text-muted-foreground">Loading users...</p>
-              ) : allUsers.length === 0 ? (
-                <p className="text-muted-foreground">No users yet</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
-                        <th className="px-4 py-3 text-left font-medium">Name</th>
-                        <th className="px-4 py-3 text-left font-medium">Email</th>
-                        <th className="px-4 py-3 text-left font-medium">Role</th>
-                        <th className="px-4 py-3 text-right font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedUsers.map((user, index) => {
-                        const userId = (user as any)._id || user.id
-                        const isEditing = editingUserId === userId
-                        const userName = (user as any).fullName || user.name || user.email || 'N/A'
-                        const rowNo = (usersPagination.page - 1) * usersPagination.perPage + index + 1
-
-                        return (
-                          <tr key={userId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
-                            <td className="px-4 py-3 font-medium">{userName}</td>
-                            <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
-                            <td className="px-4 py-3">
-                              {isEditing ? (
-                                <div className="flex items-center gap-2">
-                                  <Select
-                                    value={editingRole || user.role}
-                                    onValueChange={(value) => setEditingRole(value)}
-                                  >
-                                    <SelectTrigger className="w-32 h-8">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="customer">Customer</SelectItem>
-                                      <SelectItem value="seller">Seller</SelectItem>
-                                      <SelectItem value="admin">Admin</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleRoleChange(userId, (editingRole || user.role) as any)}
-                                  >
-                                    Save
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setEditingUserId(null)
-                                      setEditingRole('')
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              ) : (
-                                <span className="capitalize font-medium">{user.role}</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {!isEditing && (
-                                <div className="flex gap-2 justify-end">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingUserId(userId)
-                                      setEditingRole(user.role)
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4 mr-1" />
-                                    Edit Role
-                                  </Button>
-                                  {user.role !== 'admin' && (
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={() => handleDeleteUser(userId, userName)}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-1" />
-                                      Delete
-                                    </Button>
-                                  )}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {allUsers.length > 0 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={usersPagination.page <= 1}
-                    onClick={() => setUsersPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {usersPagination.page} of {usersTotalPages} ({allUsers.length} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={usersPagination.page >= usersTotalPages}
-                    onClick={() => setUsersPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="orders" className="space-y-4">
-          <div className="grid md:grid-cols-4 gap-4 mb-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{orderStats?.totalOrders || 0}</div>
-                <p className="text-xs text-muted-foreground">All time</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${orderStats ? orderStats.totalRevenue.toFixed(2) : '0.00'}</div>
-                <p className="text-xs text-muted-foreground">Excluding cancelled</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">{orderStats?.pendingOrders || 0}</div>
-                <p className="text-xs text-muted-foreground">Awaiting processing</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Delivered</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{orderStats?.deliveredOrders || 0}</div>
-                <p className="text-xs text-muted-foreground">Completed orders</p>
-              </CardContent>
-            </Card>
-          </div>
           <Card>
             <CardHeader>
               <CardTitle>All Orders</CardTitle>
@@ -942,7 +1145,7 @@ export default function AdminProfile() {
                             <td className="px-4 py-3 text-muted-foreground">{userEmail}</td>
                             <td className="px-4 py-3 text-right">
                               <Button
-                                variant="outline"
+                                variant="default"
                                 size="sm"
                                 onClick={() => navigate(`/order/${orderId}`)}
                               >
@@ -1171,32 +1374,6 @@ export default function AdminProfile() {
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
-          <div className="flex items-center gap-4 mb-4">
-            <Button
-              variant={reportsPagination.page === 1 && !allReports.some(r => r.status !== 'pending') ? 'default' : 'outline'}
-              onClick={() => fetchReports(1, 'pending')}
-            >
-              Pending ({pendingReportsCount})
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => fetchReports(1, 'resolved')}
-            >
-              Resolved
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => fetchReports(1, 'dismissed')}
-            >
-              Dismissed
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => fetchReports(1)}
-            >
-              All Reports
-            </Button>
-          </div>
           <Card>
             <CardHeader>
               <CardTitle>Reports Management</CardTitle>
@@ -1219,11 +1396,9 @@ export default function AdminProfile() {
                         <th className="h-12 px-4 text-left font-medium w-14">No.</th>
                         <th className="h-12 px-4 text-left font-medium">Report ID</th>
                         <th className="h-12 px-4 text-left font-medium">Type</th>
-                        <th className="h-12 px-4 text-left font-medium">Reporter</th>
-                        <th className="h-12 px-4 text-left font-medium">Reason</th>
                         <th className="h-12 px-4 text-left font-medium">Status</th>
+                        <th className="h-12 px-4 text-left font-medium">Description</th>
                         <th className="h-12 px-4 text-left font-medium">Reported Content</th>
-                        <th className="h-12 px-4 text-left font-medium">Date</th>
                         <th className="h-12 px-4 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -1267,17 +1442,6 @@ export default function AdminProfile() {
                               </Badge>
                             </td>
                             <td className="h-16 px-4 align-middle">
-                              <div className="flex flex-col">
-                                <span className="font-medium">{reporterName}</span>
-                                <span className="text-xs text-muted-foreground">{reporterEmail}</span>
-                              </div>
-                            </td>
-                            <td className="h-16 px-4 align-middle">
-                              <p className="max-w-[150px] truncate" title={report.reason}>
-                                {report.reason}
-                              </p>
-                            </td>
-                            <td className="h-16 px-4 align-middle">
                               <Badge
                                 variant={
                                   report.status === 'resolved' ? 'default' :
@@ -1290,20 +1454,19 @@ export default function AdminProfile() {
                               </Badge>
                             </td>
                             <td className="h-16 px-4 align-middle">
+                              <p className="max-w-[200px] truncate" title={report.description || 'No description'}>
+                                {report.description || '—'}
+                              </p>
+                            </td>
+                            <td className="h-16 px-4 align-middle">
                               <p className="max-w-[150px] truncate" title={contentSummary}>
                                 {contentSummary}
                               </p>
                             </td>
-                            <td className="h-16 px-4 align-middle">
-                              <div className="flex flex-col">
-                                <span className="text-xs">{new Date(report.createdAt).toLocaleDateString()}</span>
-                                <span className="text-xs text-muted-foreground">{new Date(report.createdAt).toLocaleTimeString()}</span>
-                              </div>
-                            </td>
                             <td className="h-16 px-4 align-middle text-right">
                               <div className="flex gap-2 justify-end">
                                 <Button
-                                  variant="outline"
+                                  variant="default"
                                   size="sm"
                                   onClick={() => {
                                     setSelectedReport(report)
@@ -1313,74 +1476,19 @@ export default function AdminProfile() {
                                   <Eye className="h-4 w-4 mr-1" />
                                   View
                                 </Button>
-                                {isPending && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      onClick={async () => {
-                                        setResolvingReportId(reportId)
-                                        try {
-                                          await reportService.resolveReport(reportId, {
-                                            adminNotes: reportAdminNotes[reportId] || undefined
-                                          })
-                                          toast({
-                                            title: 'Report Resolved',
-                                            description: 'The report has been marked as resolved.',
-                                            variant: 'default',
-                                          })
-                                          await fetchReports(reportsPagination.page)
-                                          await fetchPendingReportsCount()
-                                          setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
-                                        } catch (error: any) {
-                                          const errorMessage = error?.response?.data?.error || error?.message || 'Failed to resolve report'
-                                          toast({
-                                            title: 'Resolution Failed',
-                                            description: errorMessage,
-                                            variant: 'destructive',
-                                          })
-                                        } finally {
-                                          setResolvingReportId(null)
-                                        }
-                                      }}
-                                      disabled={isResolving || isDismissing}
-                                      className="bg-green-600 hover:bg-green-700"
-                                    >
-                                      {isResolving ? '...' : 'Resolve'}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="destructive"
-                                      onClick={async () => {
-                                        setDismissingReportId(reportId)
-                                        try {
-                                          await reportService.dismissReport(reportId, {
-                                            adminNotes: reportAdminNotes[reportId] || undefined
-                                          })
-                                          toast({
-                                            title: 'Report Dismissed',
-                                            description: 'The report has been dismissed.',
-                                            variant: 'default',
-                                          })
-                                          await fetchReports(reportsPagination.page)
-                                          await fetchPendingReportsCount()
-                                          setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
-                                        } catch (error: any) {
-                                          const errorMessage = error?.response?.data?.error || error?.message || 'Failed to dismiss report'
-                                          toast({
-                                            title: 'Dismissal Failed',
-                                            description: errorMessage,
-                                            variant: 'destructive',
-                                          })
-                                        } finally {
-                                          setDismissingReportId(null)
-                                        }
-                                      }}
-                                      disabled={isResolving || isDismissing}
-                                    >
-                                      {isDismissing ? '...' : 'Dismiss'}
-                                    </Button>
-                                  </>
-                                )}
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedReport(report)
+                                    setEditingReportStatus(report.status)
+                                    setEditingReportNotes(report.adminNotes || '')
+                                    setEditReportDialogOpen(true)
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -1548,93 +1656,119 @@ export default function AdminProfile() {
                       </div>
                     )}
 
-                    {selectedReport.status === 'pending' && (
-                      <div className="border-t pt-4 space-y-2">
-                        <div>
-                          <p className="text-sm font-medium mb-2">Admin Notes (optional):</p>
-                          <textarea
-                            className="w-full min-h-[80px] px-3 py-2 text-sm border rounded-md"
-                            placeholder="Add notes about this report..."
-                            value={reportAdminNotes[selectedReport.id || selectedReport._id] || ''}
-                            onChange={(e) => setReportAdminNotes({ 
-                              ...reportAdminNotes, 
-                              [selectedReport.id || selectedReport._id]: e.target.value 
-                            })}
-                          />
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            size="sm"
-                            onClick={async () => {
-                              const reportId = selectedReport.id || selectedReport._id
-                              setResolvingReportId(reportId)
-                              try {
-                                await reportService.resolveReport(reportId, {
-                                  adminNotes: reportAdminNotes[reportId] || undefined
-                                })
-                                toast({
-                                  title: 'Report Resolved',
-                                  description: 'The report has been marked as resolved.',
-                                  variant: 'default',
-                                })
-                                await fetchReports(reportsPagination.page)
-                                await fetchPendingReportsCount()
-                                setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
-                                setReportDialogOpen(false)
-                              } catch (error: any) {
-                                const errorMessage = error?.response?.data?.error || error?.message || 'Failed to resolve report'
-                                toast({
-                                  title: 'Resolution Failed',
-                                  description: errorMessage,
-                                  variant: 'destructive',
-                                })
-                              } finally {
-                                setResolvingReportId(null)
-                              }
-                            }}
-                            disabled={resolvingReportId === (selectedReport.id || selectedReport._id) || dismissingReportId === (selectedReport.id || selectedReport._id)}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {resolvingReportId === (selectedReport.id || selectedReport._id) ? 'Resolving...' : 'Resolve'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={async () => {
-                              const reportId = selectedReport.id || selectedReport._id
-                              setDismissingReportId(reportId)
-                              try {
-                                await reportService.dismissReport(reportId, {
-                                  adminNotes: reportAdminNotes[reportId] || undefined
-                                })
-                                toast({
-                                  title: 'Report Dismissed',
-                                  description: 'The report has been dismissed.',
-                                  variant: 'default',
-                                })
-                                await fetchReports(reportsPagination.page)
-                                await fetchPendingReportsCount()
-                                setReportAdminNotes({ ...reportAdminNotes, [reportId]: '' })
-                                setReportDialogOpen(false)
-                              } catch (error: any) {
-                                const errorMessage = error?.response?.data?.error || error?.message || 'Failed to dismiss report'
-                                toast({
-                                  title: 'Dismissal Failed',
-                                  description: errorMessage,
-                                  variant: 'destructive',
-                                })
-                              } finally {
-                                setDismissingReportId(null)
-                              }
-                            }}
-                            disabled={resolvingReportId === (selectedReport.id || selectedReport._id) || dismissingReportId === (selectedReport.id || selectedReport._id)}
-                          >
-                            {dismissingReportId === (selectedReport.id || selectedReport._id) ? 'Dismissing...' : 'Dismiss'}
-                          </Button>
-                        </DialogFooter>
-                      </div>
-                    )}
                   </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Report Dialog */}
+          <Dialog open={editReportDialogOpen} onOpenChange={setEditReportDialogOpen}>
+            <DialogContent className="max-w-lg">
+              {selectedReport && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>
+                      Edit Report #{selectedReport.id?.slice(-8) || selectedReport._id?.slice(-8)}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Update the status and add admin notes for this report
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Status</label>
+                      <Select
+                        value={editingReportStatus}
+                        onValueChange={(value) => setEditingReportStatus(value as 'pending' | 'resolved' | 'dismissed')}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="resolved">Resolved</SelectItem>
+                          <SelectItem value="dismissed">Dismissed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Admin Notes (Optional)</label>
+                      <Textarea
+                        placeholder="Add notes about this report..."
+                        value={editingReportNotes}
+                        onChange={(e) => setEditingReportNotes(e.target.value)}
+                        rows={4}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditReportDialogOpen(false)
+                        setEditingReportNotes('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        const reportId = selectedReport.id || selectedReport._id
+                        setUpdatingReportId(reportId)
+                        try {
+                          const currentStatus = selectedReport.status
+                          const newStatus = editingReportStatus
+
+                          // Check if status or notes changed
+                          const notesChanged = editingReportNotes.trim() !== (selectedReport.adminNotes || '')
+                          
+                          if (newStatus !== currentStatus || notesChanged) {
+                            // Use the general update endpoint to change status to any value including pending
+                            await reportService.updateReportStatus(reportId, {
+                              status: newStatus,
+                              adminNotes: editingReportNotes.trim() || undefined
+                            })
+                            
+                            toast({
+                              title: 'Report Updated',
+                              description: newStatus !== currentStatus 
+                                ? `The report status has been updated to ${newStatus}.`
+                                : 'Admin notes have been updated.',
+                              variant: 'default',
+                            })
+                          } else {
+                            // No changes made
+                            toast({
+                              title: 'No Changes',
+                              description: 'No changes were made to the report.',
+                              variant: 'default',
+                            })
+                            setUpdatingReportId(null)
+                            setEditReportDialogOpen(false)
+                            return
+                          }
+
+                          await fetchReports(reportsPagination.page)
+                          await fetchPendingReportsCount()
+                          setEditReportDialogOpen(false)
+                          setEditingReportNotes('')
+                        } catch (error: any) {
+                          const errorMessage = error?.response?.data?.error || error?.message || 'Failed to update report'
+                          toast({
+                            title: 'Update Failed',
+                            description: errorMessage,
+                            variant: 'destructive',
+                          })
+                        } finally {
+                          setUpdatingReportId(null)
+                        }
+                      }}
+                      disabled={updatingReportId === (selectedReport.id || selectedReport._id)}
+                    >
+                      {updatingReportId === (selectedReport.id || selectedReport._id) ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </DialogFooter>
                 </>
               )}
             </DialogContent>
@@ -1946,6 +2080,514 @@ export default function AdminProfile() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isCreatingSeller ? 'Create New Seller' : 'Create New Buyer'}</DialogTitle>
+            <DialogDescription>
+              Create a new {isCreatingSeller ? 'seller' : newUser.role === 'seller' ? 'seller' : 'buyer'} account
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Email *</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="user@example.com"
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">Password *</label>
+              <input
+                type="password"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="Minimum 6 characters"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                required
+                minLength={6}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">Full Name</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="John Doe"
+                value={newUser.fullName}
+                onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+              />
+            </div>
+
+            {(isCreatingSeller || newUser.role === 'seller') && (
+              <>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Business Name *</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border rounded-md"
+                    placeholder="My Business"
+                    value={newUser.businessName}
+                    onChange={(e) => setNewUser({ ...newUser, businessName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Business Description</label>
+                  <textarea
+                    className="w-full px-3 py-2 border rounded-md min-h-[100px]"
+                    placeholder="Describe your business..."
+                    value={newUser.businessDescription}
+                    onChange={(e) => setNewUser({ ...newUser, businessDescription: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateUserDialogOpen(false)
+                setIsCreatingSeller(false)
+                setNewUser({
+                  email: '',
+                  password: '',
+                  fullName: '',
+                  role: 'customer',
+                  businessName: '',
+                  businessDescription: ''
+                })
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateUser}
+              disabled={creatingUser || !newUser.email || !newUser.password || ((isCreatingSeller || newUser.role === 'seller') && !newUser.businessName)}
+            >
+              {creatingUser ? (isCreatingSeller ? 'Creating Seller...' : 'Creating...') : (isCreatingSeller ? 'Create Seller' : 'Create Buyer')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Seller Dialog */}
+      <Dialog open={editSellerDialogOpen} onOpenChange={setEditSellerDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Seller</DialogTitle>
+            <DialogDescription>
+              Update seller profile information
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Business Name *</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="My Business"
+                value={editingSeller.businessName}
+                onChange={(e) => setEditingSeller({ ...editingSeller, businessName: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Business Description</label>
+              <textarea
+                className="w-full px-3 py-2 border rounded-md min-h-[100px]"
+                placeholder="Describe the business..."
+                value={editingSeller.businessDescription}
+                onChange={(e) => setEditingSeller({ ...editingSeller, businessDescription: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Status</label>
+              <Select
+                value={editingSeller.status}
+                onValueChange={(value: 'pending' | 'approved' | 'rejected') => {
+                  setEditingSeller({ ...editingSeller, status: value })
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditSellerDialogOpen(false)
+                setEditingSellerId(null)
+                setEditingSeller({
+                  businessName: '',
+                  businessDescription: '',
+                  status: 'pending',
+                  userId: ''
+                })
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateSeller}
+              disabled={updatingSeller || !editingSeller.businessName}
+            >
+              {updatingSeller ? 'Updating...' : 'Update Seller'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Buyer Dialog */}
+      <Dialog open={editBuyerDialogOpen} onOpenChange={setEditBuyerDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Buyer</DialogTitle>
+            <DialogDescription>
+              Update buyer profile information
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Full Name</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="John Doe"
+                value={editingBuyer.fullName}
+                onChange={(e) => setEditingBuyer({ ...editingBuyer, fullName: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Email *</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="buyer@example.com"
+                value={editingBuyer.email}
+                onChange={(e) => setEditingBuyer({ ...editingBuyer, email: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditBuyerDialogOpen(false)
+                setEditingBuyerId(null)
+                setEditingBuyer({
+                  fullName: '',
+                  email: ''
+                })
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateBuyer}
+              disabled={updatingBuyer || !editingBuyer.email}
+            >
+              {updatingBuyer ? 'Updating...' : 'Update Buyer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Seller Dialog */}
+      <AlertDialog open={deleteSellerDialogOpen} onOpenChange={setDeleteSellerDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Seller</AlertDialogTitle>
+            <AlertDialogDescription>
+              {sellerToDelete && `Are you sure you want to delete seller "${sellerToDelete.name}"? This will remove the seller profile and revert the user to customer role. This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteSellerConfirm}
+              disabled={deletingSeller}
+            >
+              {deletingSeller ? 'Deleting...' : 'Delete'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Statistics Dialog */}
+      <Dialog open={statisticsDialogOpen} onOpenChange={setStatisticsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Admin Statistics
+            </DialogTitle>
+            <DialogDescription>
+              Overview of platform performance and key metrics
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 mt-4">
+            {/* Summary Cards */}
+            <div className="grid md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allUsers.length}</div>
+                  <p className="text-xs text-muted-foreground">All users</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Sellers</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allSellers.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {allSellers.filter((s) => s.status === 'approved').length} active
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Products</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allProducts.length}</div>
+                  <p className="text-xs text-muted-foreground">Total listings</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Orders</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allOrders.length}</div>
+                  <p className="text-xs text-muted-foreground">Total orders</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Revenue and Order Stats */}
+            {orderStats && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Order Statistics</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Total Revenue</span>
+                      <span className="font-bold">${orderStats.totalRevenue.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Total Orders</span>
+                      <span className="font-bold">{orderStats.totalOrders}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Pending Orders</span>
+                      <span className="font-bold text-orange-600">{orderStats.pendingOrders}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Delivered Orders</span>
+                      <span className="font-bold text-green-600">{orderStats.deliveredOrders}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Product Statistics</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Total Products</span>
+                      <span className="font-bold">{productStats.total}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Pending Approval</span>
+                      <span className="font-bold text-orange-600">{productStats.pending}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Approved</span>
+                      <span className="font-bold text-green-600">
+                        {allProducts.filter((p) => p.status === 'approved').length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Rejected</span>
+                      <span className="font-bold text-red-600">
+                        {allProducts.filter((p) => p.status === 'rejected').length}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* User Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">User Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {allUsers.filter((u) => u.role === 'customer').length}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Buyers</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {allUsers.filter((u) => u.role === 'seller').length}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Sellers</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {allUsers.filter((u) => u.role === 'admin').length}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Admins</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Seller Status Breakdown */}
+            {allSellers.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Seller Status Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {allSellers.filter((s) => s.status === 'approved').length}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Approved</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-orange-600">
+                        {allSellers.filter((s) => s.status === 'pending').length}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Pending</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-red-600">
+                        {allSellers.filter((s) => s.status === 'rejected').length}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Rejected</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Order Status Breakdown */}
+            {allOrders.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Order Status Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => {
+                      const count = allOrders.filter((o) => o.status === status).length
+                      if (count === 0) return null
+                      return (
+                        <div key={status} className="text-center">
+                          <div className="text-2xl font-bold">{count}</div>
+                          <p className="text-xs text-muted-foreground capitalize">{status}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Reviews and Reports */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Reviews</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allReviews.length}</div>
+                  <p className="text-xs text-muted-foreground">Total reviews</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Reports</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allReports.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {pendingReportsCount > 0 && (
+                      <span className="text-orange-600">{pendingReportsCount} pending</span>
+                    )}
+                    {pendingReportsCount === 0 && 'All resolved'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Payout Statistics */}
+            {payoutStats && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Payout Statistics</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Total Payouts</span>
+                    <span className="font-bold">{payoutStats.total}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Pending</span>
+                    <span className="font-bold text-orange-600">{payoutStats.pending}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Completed</span>
+                    <span className="font-bold text-green-600">{payoutStats.completed}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Failed</span>
+                    <span className="font-bold text-red-600">{payoutStats.failed}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

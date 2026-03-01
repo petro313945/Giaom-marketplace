@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -18,13 +19,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, Heart, MapPin, CreditCard, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart } from 'lucide-react'
+import { Package, Heart, MapPin, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart, ShoppingBag } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import * as orderService from '../../services/orderService'
 import * as userService from '../../services/userService'
 import * as addressService from '../../services/addressService'
 import * as wishlistService from '../../services/wishlistService'
-import { getImageUrl } from '../../utils/imageUtils'
+import { getImageUrl, getFirstImageUrl } from '../../utils/imageUtils'
 import { Link } from 'react-router-dom'
 import type { Order } from '../../services/orderService'
 import type { Address, CreateAddressData } from '../../services/addressService'
@@ -57,7 +58,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
   const [searchParams, setSearchParams] = useSearchParams()
   
   // Valid tab values
-  const validTabs = ['orders', 'wishlist', 'addresses', 'payment', 'profile']
+  const validTabs = ['orders', 'wishlist', 'addresses', 'bought-product', 'profile']
   
   // Get active tab from URL or use default
   const urlTab = searchParams.get('tab')
@@ -65,7 +66,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
     ? urlTab 
     : (defaultTab && validTabs.includes(defaultTab)) 
       ? defaultTab 
-      : 'orders'
+      : 'bought-product'
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, limit: 10 })
   const [loading, setLoading] = useState(true)
@@ -81,6 +82,9 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
   const [addressToDelete, setAddressToDelete] = useState<string | null>(null)
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [loadingWishlist, setLoadingWishlist] = useState(false)
+  const [boughtProductsPagination, setBoughtProductsPagination] = useState({ page: 1, limit: 10 })
+  const [boughtProductsSortBy, setBoughtProductsSortBy] = useState<string>('date')
+  const [boughtProductsSortOrder, setBoughtProductsSortOrder] = useState<'asc' | 'desc'>('desc')
   
   const {
     register,
@@ -307,17 +311,131 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
     }
   }
 
+  // Aggregate bought products from orders
+  const getBoughtProducts = () => {
+    const productMap = new Map<string, {
+      productId: string
+      title: string
+      imageUrl?: string
+      imageUrls?: string[]
+      totalQuantity: number
+      totalPaid: number
+      orderIds: Set<string>
+      sellerEmails: Set<string>
+      lastPurchaseDate: Date
+      averagePrice: number
+    }>()
+
+    orders.forEach(order => {
+      const orderId = order.id || (order as any)._id || ''
+      const orderDate = new Date(order.createdAt)
+      
+      order.items?.forEach(item => {
+        const product = typeof item.productId === 'object' ? item.productId : null
+        const productId = typeof item.productId === 'string' 
+          ? item.productId 
+          : (item.productId as any)?._id || (item.productId as any)?.id || ''
+        
+        if (!productId) return
+
+        const productData = product as any
+        const sellerEmail = productData?.sellerId?.email || productData?.seller?.email || null
+        
+        const existing = productMap.get(productId) || {
+          productId,
+          title: item.title || productData?.title || 'Unknown Product',
+          imageUrl: productData?.imageUrl,
+          imageUrls: productData?.imageUrls,
+          totalQuantity: 0,
+          totalPaid: 0,
+          orderIds: new Set<string>(),
+          sellerEmails: new Set<string>(),
+          lastPurchaseDate: orderDate,
+          averagePrice: 0
+        }
+
+        // Update image if not set and product data is available
+        if ((!existing.imageUrl && !existing.imageUrls) && productData) {
+          existing.imageUrl = productData.imageUrl
+          existing.imageUrls = productData.imageUrls
+        }
+
+        existing.totalQuantity += item.quantity
+        existing.totalPaid += item.price * item.quantity
+        existing.orderIds.add(orderId)
+        if (sellerEmail) {
+          existing.sellerEmails.add(sellerEmail)
+        }
+        if (orderDate > existing.lastPurchaseDate) {
+          existing.lastPurchaseDate = orderDate
+        }
+
+        productMap.set(productId, existing)
+      })
+    })
+
+    // Calculate average price and order count for each product
+    const products = Array.from(productMap.values()).map(product => ({
+      productId: product.productId,
+      title: product.title,
+      imageUrl: product.imageUrl,
+      imageUrls: product.imageUrls,
+      totalQuantity: product.totalQuantity,
+      totalPaid: product.totalPaid,
+      orderCount: product.orderIds.size,
+      orderIds: Array.from(product.orderIds),
+      sellerEmails: Array.from(product.sellerEmails),
+      lastPurchaseDate: product.lastPurchaseDate,
+      averagePrice: product.totalPaid / product.totalQuantity
+    }))
+
+    // Sort products
+    products.sort((a, b) => {
+      let comparison = 0
+      switch (boughtProductsSortBy) {
+        case 'totalPaid':
+          comparison = a.totalPaid - b.totalPaid
+          break
+        case 'quantity':
+          comparison = a.totalQuantity - b.totalQuantity
+          break
+        case 'orders':
+          comparison = a.orderCount - b.orderCount
+          break
+        case 'date':
+          comparison = a.lastPurchaseDate.getTime() - b.lastPurchaseDate.getTime()
+          break
+        case 'title':
+          comparison = a.title.localeCompare(b.title)
+          break
+        case 'averagePrice':
+          comparison = a.averagePrice - b.averagePrice
+          break
+        default:
+          return 0
+      }
+      return boughtProductsSortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return products
+  }
+
   return (
     <div className="container py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">My Account</h1>
-        <p className="text-muted-foreground">Manage your account and view your orders</p>
+        <h1 className="text-3xl font-bold mb-2">
+          {user?.fullName || 'User'} Account <span className="text-sm text-muted-foreground font-normal">{user?.email || ''}</span>
+        </h1>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => {
         setSearchParams({ tab: value })
       }} className="space-y-6">
         <TabsList>
+          <TabsTrigger value="bought-product" className="gap-2">
+            <ShoppingBag className="h-4 w-4" />
+            Bought Product
+          </TabsTrigger>
           <TabsTrigger value="orders" className="gap-2">
             <Package className="h-4 w-4" />
             Orders
@@ -329,10 +447,6 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
           <TabsTrigger value="addresses" className="gap-2">
             <MapPin className="h-4 w-4" />
             Addresses
-          </TabsTrigger>
-          <TabsTrigger value="payment" className="gap-2">
-            <CreditCard className="h-4 w-4" />
-            Payment
           </TabsTrigger>
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />
@@ -392,7 +506,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                               </td>
                               <td className="px-4 py-3 text-right">
                                 <Button
-                                  variant="outline"
+                                  variant="default"
                                   size="sm"
                                   onClick={() => navigate(`/order/${orderId}`)}
                                 >
@@ -736,14 +850,180 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
           </Card>
         </TabsContent>
 
-        <TabsContent value="payment" className="space-y-4">
+        <TabsContent value="bought-product" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Methods</CardTitle>
-              <CardDescription>Manage your payment options</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Bought Products</CardTitle>
+                  <CardDescription>View all products you have purchased</CardDescription>
+                </div>
+                <Select
+                  value={`${boughtProductsSortBy}-${boughtProductsSortOrder}`}
+                  onValueChange={(value) => {
+                    const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                    setBoughtProductsSortBy(newSortBy)
+                    setBoughtProductsSortOrder(newSortOrder)
+                  }}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="totalPaid-desc">Total Paid (High to Low)</SelectItem>
+                    <SelectItem value="totalPaid-asc">Total Paid (Low to High)</SelectItem>
+                    <SelectItem value="quantity-desc">Quantity (High to Low)</SelectItem>
+                    <SelectItem value="quantity-asc">Quantity (Low to High)</SelectItem>
+                    <SelectItem value="orders-desc">Orders (High to Low)</SelectItem>
+                    <SelectItem value="orders-asc">Orders (Low to High)</SelectItem>
+                    <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                    <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                    <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                    <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                    <SelectItem value="averagePrice-desc">Avg Price (High to Low)</SelectItem>
+                    <SelectItem value="averagePrice-asc">Avg Price (Low to High)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
-              <Button>Add Payment Method</Button>
+              {(() => {
+                const boughtProducts = getBoughtProducts()
+                const paginatedProducts = boughtProducts.slice(
+                  (boughtProductsPagination.page - 1) * boughtProductsPagination.limit,
+                  boughtProductsPagination.page * boughtProductsPagination.limit
+                )
+
+                if (boughtProducts.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <ShoppingBag className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground mb-4">No products purchased yet</p>
+                      <Button onClick={() => navigate('/')}>
+                        <ShoppingCart className="h-4 w-4 mr-2" />
+                        Start Shopping
+                      </Button>
+                    </div>
+                  )
+                }
+
+                return (
+                  <>
+                    <div className="overflow-x-auto rounded-lg border">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="h-12 px-4 text-left font-medium w-14">No.</th>
+                            <th className="h-12 px-4 text-left font-medium">Image</th>
+                            <th className="h-12 px-4 text-left font-medium">Title</th>
+                            <th className="h-12 px-4 text-left font-medium">Total Quantity Bought</th>
+                            <th className="h-12 px-4 text-left font-medium">Total Paid</th>
+                            <th className="h-12 px-4 text-left font-medium">Average Price</th>
+                            <th className="h-12 px-4 text-left font-medium">Order ID</th>
+                            <th className="h-12 px-4 text-left font-medium">Last Purchase</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedProducts.map((product, index) => {
+                            const rowNo = (boughtProductsPagination.page - 1) * boughtProductsPagination.limit + index + 1
+                            const productImage = getFirstImageUrl({ imageUrl: product.imageUrl, imageUrls: product.imageUrls })
+                            return (
+                              <tr key={product.productId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                                <td className="h-16 px-4 align-middle font-medium">{rowNo}</td>
+                                <td className="h-16 px-4 align-middle">
+                                  <Link to={`/product/${product.productId}`}>
+                                    <div className="w-12 h-12 bg-muted rounded-md overflow-hidden flex-shrink-0">
+                                      <img
+                                        src={productImage}
+                                        alt={product.title}
+                                        className="w-full h-full object-contain"
+                                      />
+                                    </div>
+                                  </Link>
+                                </td>
+                                <td className="h-16 px-4 align-middle">
+                                  <Link to={`/product/${product.productId}`}>
+                                    <p className="font-medium line-clamp-2 max-w-[200px] hover:text-primary" title={product.title}>{product.title}</p>
+                                  </Link>
+                                </td>
+                                <td className="h-16 px-4 align-middle text-muted-foreground">{product.totalQuantity}</td>
+                                <td className="h-16 px-4 align-middle font-medium">${product.totalPaid.toFixed(2)}</td>
+                                <td className="h-16 px-4 align-middle text-muted-foreground">${product.averagePrice.toFixed(2)}</td>
+                                <td className="h-16 px-4 align-middle text-muted-foreground">
+                                  {product.orderIds && product.orderIds.length > 0 ? (
+                                    <div className="max-w-[200px]">
+                                      <p 
+                                        className="text-sm truncate" 
+                                        title={product.orderIds.map(id => `#${id.slice(-8)}`).join(', ')}
+                                      >
+                                        {product.orderIds.length === 1 
+                                          ? `#${product.orderIds[0].slice(-8)}`
+                                          : `#${product.orderIds[0].slice(-8)}${product.orderIds.length > 1 ? `, +${product.orderIds.length - 1} more` : ''}`
+                                        }
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </td>
+                                <td className="h-16 px-4 align-middle text-muted-foreground">
+                                  {product.lastPurchaseDate.toLocaleDateString()}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                      <span className="text-muted-foreground">
+                        Showing{' '}
+                        {boughtProducts.length === 0
+                          ? 0
+                          : (boughtProductsPagination.page - 1) * boughtProductsPagination.limit + 1}
+                        –{Math.min(boughtProductsPagination.page * boughtProductsPagination.limit, boughtProducts.length)} of{' '}
+                        {boughtProducts.length} products
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={boughtProductsPagination.page <= 1}
+                          onClick={() =>
+                            setBoughtProductsPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))
+                          }
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="text-muted-foreground min-w-[120px] text-center">
+                          Page {boughtProductsPagination.page} of{' '}
+                          {Math.max(1, Math.ceil(boughtProducts.length / boughtProductsPagination.limit))}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            boughtProductsPagination.page >= Math.ceil(boughtProducts.length / boughtProductsPagination.limit)
+                          }
+                          onClick={() =>
+                            setBoughtProductsPagination((p) => ({
+                              ...p,
+                              page: Math.min(
+                                Math.ceil(boughtProducts.length / boughtProductsPagination.limit),
+                                p.page + 1
+                              )
+                            }))
+                          }
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

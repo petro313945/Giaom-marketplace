@@ -93,3 +93,20 @@ export const dismissReport = async (
   );
   return response.data;
 };
+
+// Admin: Update report status (allows changing to any status including pending)
+export interface UpdateReportStatusData {
+  status: 'pending' | 'resolved' | 'dismissed';
+  adminNotes?: string;
+}
+
+export const updateReportStatus = async (
+  reportId: string,
+  data: UpdateReportStatusData
+): Promise<{ message: string; report: Report }> => {
+  const response = await api.put<{ message: string; report: Report }>(
+    `/reports/admin/${reportId}/status`,
+    data
+  );
+  return response.data;
+};
