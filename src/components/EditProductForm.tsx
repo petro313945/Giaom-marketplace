@@ -133,13 +133,13 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
               })
             }
             setColorImages(colorImgsMap)
-            // Extract unique colors from variants for color image section
-            const uniqueColors = Array.from(new Set(
-              productVariants
-                .filter(v => v.color)
-                .map(v => v.color)
-                .filter((color): color is string => !!color)
-            ))
+            // Extract unique colors from variants AND color images
+            const variantColors = productVariants
+              .filter(v => v.color)
+              .map(v => v.color)
+              .filter((color): color is string => !!color)
+            const colorImageColors = Array.from(colorImgsMap.keys())
+            const uniqueColors = Array.from(new Set([...variantColors, ...colorImageColors]))
             setSelectedColors(uniqueColors)
             setError(null)
           })
@@ -179,13 +179,13 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
               })
             }
             setColorImages(colorImgsMap)
-            // Extract unique colors from variants for color image section
-            const uniqueColors = Array.from(new Set(
-              productVariants
-                .filter(v => v.color)
-                .map(v => v.color)
-                .filter((color): color is string => !!color)
-            ))
+            // Extract unique colors from variants AND color images
+            const variantColors = productVariants
+              .filter(v => v.color)
+              .map(v => v.color)
+              .filter((color): color is string => !!color)
+            const colorImageColors = Array.from(colorImgsMap.keys())
+            const uniqueColors = Array.from(new Set([...variantColors, ...colorImageColors]))
             setSelectedColors(uniqueColors)
             setError(null)
           })
@@ -209,6 +209,29 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         setVariants(productVariants)
         setProductType(productVariants.length > 0 ? 'variants' : 'simple')
         setDiscountTiers(product.bulkDiscountTiers || [])
+        // Initialize color images from existing data
+        const colorImgsMap = new Map<string, ImageItem[]>()
+        if (product.colorImages && typeof product.colorImages === 'object') {
+          Object.keys(product.colorImages).forEach(color => {
+            const urls = product.colorImages[color]
+            if (Array.isArray(urls) && urls.length > 0) {
+              colorImgsMap.set(color, urls.map(url => ({
+                id: `existing-color-${color}-${url}`,
+                type: 'url' as const,
+                url
+              })))
+            }
+          })
+        }
+        setColorImages(colorImgsMap)
+        // Extract unique colors from variants AND color images
+        const variantColors = productVariants
+          .filter(v => v.color)
+          .map(v => v.color)
+          .filter((color): color is string => !!color)
+        const colorImageColors = Array.from(colorImgsMap.keys())
+        const uniqueColors = Array.from(new Set([...variantColors, ...colorImageColors]))
+        setSelectedColors(uniqueColors)
         setError(null)
       }
     } else {
@@ -836,11 +859,11 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {colorImgs.map((img) => (
-                              <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden">
+                              <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden bg-muted">
                                 <img
-                                  src={img.preview || img.url}
+                                  src={img.preview || getImageUrl(img.url)}
                                   alt={`${color} preview`}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain"
                                 />
                                 <Button
                                   type="button"

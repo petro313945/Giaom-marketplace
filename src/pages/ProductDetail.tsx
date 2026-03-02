@@ -20,7 +20,7 @@ import ReviewList from '../components/ReviewList'
 import ReviewForm from '../components/ReviewForm'
 import ReportDialog from '../components/ReportDialog'
 import ImageZoom from '../components/ImageZoom'
-import { getImageUrl } from '../utils/imageUtils'
+import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
 import { calculateBulkDiscountPrice, calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
 import type { Product } from '../services/productService'
 import type { ReviewStats, Review } from '../services/reviewService'
@@ -555,16 +555,13 @@ export default function ProductDetail() {
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="flex flex-row gap-4">
-          {/* Vertical Thumbnail Strip (Left) - Show only main product images */}
+          {/* Vertical Thumbnail Strip (Left) - Show images for selected color */}
           {(() => {
-            const mainProductImages = getMainProductImages()
             const displayImages = getDisplayImages()
-            return mainProductImages.length > 1 && (
+            return displayImages.length > 1 && (
               <div className="flex flex-col gap-2 flex-shrink-0">
-                {mainProductImages.map((imageUrl, index) => {
-                  // Find this image's index in the displayImages array
-                  const displayIndex = displayImages.findIndex(img => img === imageUrl)
-                  const isSelected = displayIndex !== -1 && selectedImageIndex === displayIndex
+                {displayImages.map((imageUrl, index) => {
+                  const isSelected = selectedImageIndex === index
                   
                   return (
                     <button
@@ -575,10 +572,7 @@ export default function ProductDetail() {
                           : 'border-transparent hover:border-muted-foreground/30'
                       }`}
                       onClick={() => {
-                        // Set index to the position in displayImages array
-                        if (displayIndex !== -1) {
-                          setSelectedImageIndex(displayIndex)
-                        }
+                        setSelectedImageIndex(index)
                       }}
                     >
                       <img
@@ -1065,7 +1059,7 @@ export default function ProductDetail() {
                   <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
                     <CardContent className="p-0">
                       <img
-                        src={getImageUrl(relatedProduct.imageUrl)}
+                        src={getFirstImageUrl(relatedProduct)}
                         alt={relatedProduct.title}
                         className="w-full h-48 object-contain rounded-t-lg bg-muted"
                       />

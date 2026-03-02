@@ -30,15 +30,56 @@ export const getImageUrl = (imageUrl?: string | null): string => {
 /**
  * Get the first image URL from an array or single image
  * Useful for product listings that show one image
+ * For variant products, checks variant images if product-level images don't exist
  */
-export const getFirstImageUrl = (product: { imageUrl?: string; imageUrls?: string[] } | null | undefined): string => {
+export const getFirstImageUrl = (product: { 
+  imageUrl?: string; 
+  imageUrls?: string[]; 
+  variants?: Array<{ imageUrls?: string[] }>;
+  colorImages?: { [color: string]: string[] };
+} | null | undefined): string => {
   if (!product) {
     return '/placeholder.svg';
   }
-  if (product.imageUrls && product.imageUrls.length > 0) {
-    return getImageUrl(product.imageUrls[0]);
+  
+  // First, check product-level images (priority)
+  if (product.imageUrls && Array.isArray(product.imageUrls) && product.imageUrls.length > 0) {
+    const firstImage = product.imageUrls[0];
+    if (firstImage) {
+      return getImageUrl(firstImage);
+    }
   }
-  return getImageUrl(product.imageUrl);
+  if (product.imageUrl) {
+    return getImageUrl(product.imageUrl);
+  }
+  
+  // If no product-level images, check variants for images
+  if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+    // Find the first variant that has images
+    for (const variant of product.variants) {
+      if (variant && variant.imageUrls && Array.isArray(variant.imageUrls) && variant.imageUrls.length > 0) {
+        const firstVariantImage = variant.imageUrls[0];
+        if (firstVariantImage) {
+          return getImageUrl(firstVariantImage);
+        }
+      }
+    }
+  }
+  
+  // Check colorImages as a fallback (use first color's first image)
+  if (product.colorImages && typeof product.colorImages === 'object') {
+    const colors = Object.keys(product.colorImages);
+    if (colors.length > 0) {
+      const firstColor = colors[0];
+      const colorImages = product.colorImages[firstColor];
+      if (Array.isArray(colorImages) && colorImages.length > 0 && colorImages[0]) {
+        return getImageUrl(colorImages[0]);
+      }
+    }
+  }
+  
+  // Fallback to placeholder
+  return '/placeholder.svg';
 };
 
 /**

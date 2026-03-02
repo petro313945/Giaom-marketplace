@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext'
 import * as orderService from '../services/orderService'
 import * as addressService from '../services/addressService'
 import * as paymentService from '../services/paymentService'
-import { getImageUrl } from '../utils/imageUtils'
+import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
 import { calculateBulkDiscountPrice, calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
 import type { ShippingAddress } from '../services/orderService'
 import type { Address } from '../services/addressService'
@@ -573,10 +573,11 @@ function CheckoutForm() {
               <div className="space-y-3">
                 {cart.items.map((item) => {
                   const product = item.productId as any
-                  const productName = typeof product === 'object' ? product.title : 'Product'
-                  const basePrice = typeof product === 'object' ? product.price : 0
-                  const bulkDiscountTiers = typeof product === 'object' ? product.bulkDiscountTiers : undefined
-                  const productImage = typeof product === 'object' ? getImageUrl(product.imageUrl) : '/placeholder.svg'
+                  const productData = typeof product === 'object' ? product : null
+                  const productName = productData?.title || 'Product'
+                  const basePrice = productData?.price || 0
+                  const bulkDiscountTiers = productData?.bulkDiscountTiers
+                  const productImage = getFirstImageUrl(productData)
                   const itemTotal = calculateBulkDiscountTotal(basePrice, item.quantity, bulkDiscountTiers)
                   const originalTotal = basePrice * item.quantity
                   const itemDiscount = originalTotal - itemTotal
@@ -584,11 +585,13 @@ function CheckoutForm() {
                   
                   return (
                     <div key={item.id} className="flex gap-3">
-                      <img
-                        src={productImage}
-                        alt={productName}
-                        className="h-16 w-16 rounded object-contain bg-muted"
-                      />
+                      <div className="w-16 h-16 bg-muted rounded-md overflow-hidden flex-shrink-0">
+                        <img
+                          src={productImage}
+                          alt={productName}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{productName}</p>
                         <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>

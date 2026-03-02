@@ -245,7 +245,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
   const addColorForImages = (colorName: string) => {
     if (!colorName.trim()) return
     const color = colorName.trim()
-    if (!colorImages.has(color)) {
+    if (!colorImages || !colorImages.has(color)) {
       setColorImages(prev => {
         const newMap = new Map(prev)
         newMap.set(color, [])
@@ -269,6 +269,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
 
   // Get all colors that have images or are in selected colors
   const getAllAvailableColors = () => {
+    if (!colorImages) return selectedColors
     const colorImageColors = Array.from(colorImages.keys())
     const allColors = Array.from(new Set([...selectedColors, ...colorImageColors]))
     return allColors.sort()
@@ -277,6 +278,10 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
   // Generate variants from size/color combinations
   const generateVariantsFromBulk = () => {
     // Always use all colors that have images
+    if (!colorImages) {
+      setError('Color images state is not initialized')
+      return
+    }
     const colorsToUse = Array.from(colorImages.keys())
     
     if (selectedSizes.length === 0 && colorsToUse.length === 0) {
@@ -375,7 +380,12 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
       const validUrls = urlInputs.filter((url) => url.trim() !== '')
       imageUrls.push(...validUrls)
 
-      if (imageUrls.length === 0) {
+      // Check if there are any color images (for variant products)
+      // colorImages is a Map<string, ImageItem[]> state variable
+      const hasColorImages = colorImages && colorImages.size > 0 && Array.from(colorImages.values()).some(imgs => imgs.length > 0)
+
+      // Validate images: need either regular images or color images
+      if (imageUrls.length === 0 && !hasColorImages) {
         setError('Please add at least one image (upload or URL)')
         setIsLoading(false)
         return
@@ -408,13 +418,15 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
         }
       } else {
         // Simple product: require base price and stock
-        if (!data.price || parseFloat(data.price) <= 0) {
-          setError('Price is required for simple products')
+        const priceValue = parseFloat(data.price)
+        if (!data.price || isNaN(priceValue) || priceValue <= 0) {
+          setError('Price is required and must be a positive number for simple products')
           setIsLoading(false)
           return
         }
-        if (!data.stockQuantity || parseInt(data.stockQuantity) < 0) {
-          setError('Stock quantity is required for simple products')
+        const stockValue = parseInt(data.stockQuantity)
+        if (!data.stockQuantity || isNaN(stockValue) || stockValue < 0) {
+          setError('Stock quantity is required and must be a non-negative number for simple products')
           setIsLoading(false)
           return
         }
@@ -422,7 +434,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
 
       // Upload color images (images per color, not per variant)
       const colorImageUrls: { [color: string]: string[] } = {}
-      if (colorImages.size > 0) {
+      if (colorImages && colorImages.size > 0) {
         setIsUploading(true)
         try {
           for (const [color, images] of colorImages.entries()) {
@@ -469,17 +481,34 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             .filter(v => v.size || v.color) // Remove variants with no size or color
         : []
 
-      await productService.createProduct({
-        title: data.title,
-        description: data.description,
-        price: parseFloat(data.price), // Base price is always required
+      // Validate price before submission
+      const priceValue = parseFloat(data.price)
+      if (isNaN(priceValue) || priceValue <= 0) {
+        setError('Price must be a valid positive number')
+        setIsLoading(false)
+        return
+      }
+
+      // Prepare product data
+      const productData: any = {
+        title: data.title.trim(),
+        description: data.description.trim(),
+        price: priceValue,
         category: data.category,
-        imageUrls: imageUrls,
-        colorImages: Object.keys(colorImageUrls).length > 0 ? colorImageUrls : undefined,
+        imageUrls: imageUrls, // Always send as array (can be empty)
         stockQuantity: productType === 'simple' ? parseInt(data.stockQuantity) || 0 : 0,
         variants: productType === 'variants' ? formattedVariants : [],
-        bulkDiscountTiers: discountTiers.length > 0 ? discountTiers : undefined,
-      })
+      }
+
+      // Add optional fields only if they have values
+      if (Object.keys(colorImageUrls).length > 0) {
+        productData.colorImages = colorImageUrls
+      }
+      if (discountTiers.length > 0) {
+        productData.bulkDiscountTiers = discountTiers
+      }
+
+      await productService.createProduct(productData)
 
       reset()
       setImages([])
@@ -514,6 +543,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             setImages([])
             setUrlInputs([''])
             setVariants([])
+            setColorImages(new Map())
             setProductType('simple')
             setSelectedSizes([])
             setSelectedColors([])
@@ -553,7 +583,11 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              {...register('description', { required: 'Description is required' })}
+              {...register('description', { 
+                required: 'Description is required',
+                minLength: { value: 10, message: 'Description must be at least 10 characters' },
+                maxLength: { value: 2000, message: 'Description must be less than 2000 characters' }
+              })}
             />
             {errors.description && (
               <p className="text-sm text-destructive">{errors.description.message}</p>
@@ -707,10 +741,10 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                       <Button
                         key={color}
                         type="button"
-                        variant={colorImages.has(color) ? 'default' : 'outline'}
+                        variant={colorImages?.has(color) ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => {
-                          if (!colorImages.has(color)) {
+                          if (!colorImages?.has(color)) {
                             addColorForImages(color)
                           }
                         }}
@@ -723,7 +757,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                 </div>
 
                 {/* Color Images List */}
-                {Array.from(colorImages.keys()).length > 0 && (
+                {colorImages && Array.from(colorImages.keys()).length > 0 && (
                   <div className="space-y-3 border-t pt-3">
                     {Array.from(colorImages.keys()).map(color => {
                       const colorImgs = colorImages.get(color) || []
@@ -744,11 +778,11 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {colorImgs.map((img) => (
-                              <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden">
+                              <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden bg-muted">
                                 <img
                                   src={img.preview || img.url}
                                   alt={`${color} preview`}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain"
                                 />
                                 <Button
                                   type="button"
@@ -887,7 +921,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                 </div>
 
                 {/* Show which colors will be used */}
-                {Array.from(colorImages.keys()).length > 0 && (
+                {colorImages && Array.from(colorImages.keys()).length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-sm">Colors to use (from above)</Label>
                     <div className="flex flex-wrap gap-2">
@@ -943,12 +977,12 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                   type="button"
                   variant="secondary"
                   onClick={generateVariantsFromBulk}
-                  disabled={selectedSizes.length === 0 && colorImages.size === 0}
+                  disabled={selectedSizes.length === 0 && (!colorImages || colorImages.size === 0)}
                   className="w-full gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
                   Generate {(() => {
-                    const colorsToUse = Array.from(colorImages.keys())
+                    const colorsToUse = colorImages ? Array.from(colorImages.keys()) : []
                     if (selectedSizes.length > 0 && colorsToUse.length > 0) {
                       return `${selectedSizes.length * colorsToUse.length} variants`
                     } else if (selectedSizes.length > 0) {
@@ -1014,7 +1048,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                                     <SelectContent>
                                       {getAllAvailableColors().map(color => (
                                         <SelectItem key={color} value={color}>
-                                          {color} {colorImages.has(color) && '📷'}
+                                          {color} {colorImages?.has(color) && '📷'}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
@@ -1031,7 +1065,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                                   className="text-xs flex-1"
                                   onBlur={(e) => {
                                     const color = e.target.value.trim()
-                                    if (color && !colorImages.has(color)) {
+                                    if (color && !colorImages?.has(color)) {
                                       addColorForImages(color)
                                     }
                                   }}
@@ -1178,7 +1212,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
           </div>
 
           {/* Product Images - Only show if product has no colors */}
-          {!(productType === 'variants' && (colorImages.size > 0 || variants.some(v => v.color))) && (
+          {!(productType === 'variants' && ((colorImages && colorImages.size > 0) || variants.some(v => v.color))) && (
             <div className="space-y-4">
               <Label>Product Images</Label>
               
@@ -1213,7 +1247,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                         <img
                           src={image.preview}
                           alt="Preview"
-                          className="w-full h-32 object-cover rounded-md border"
+                          className="w-full h-32 object-contain rounded-md border bg-muted"
                         />
                         <Button
                           type="button"
@@ -1280,6 +1314,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
               setImages([])
               setUrlInputs([''])
               setVariants([])
+              setColorImages(new Map())
               setProductType('simple')
               setSelectedSizes([])
               setSelectedColors([])

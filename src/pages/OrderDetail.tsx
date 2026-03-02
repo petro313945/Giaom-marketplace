@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import * as orderService from '../services/orderService'
-import { getImageUrl } from '../utils/imageUtils'
+import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../utils/orderStatusUtils'
 import type { Order } from '../services/orderService'
 
@@ -194,7 +194,7 @@ export default function OrderDetail() {
                   const productData = typeof product === 'object' ? product : null
                   const productName = productData?.title || item.title || 'Product'
                   const productPrice = item.price || 0
-                  const productImage = productData?.imageUrl || '/placeholder.svg'
+                  const productImage = getFirstImageUrl(productData)
 
                   const productId = productData?._id || productData?.id || (typeof item.productId === 'string' ? item.productId : '')
                   
@@ -203,14 +203,14 @@ export default function OrderDetail() {
                       {productId ? (
                         <Link to={`/product/${productId}`}>
                           <img
-                            src={getImageUrl(productImage)}
+                            src={productImage}
                             alt={productName}
                             className="h-20 w-20 rounded-lg object-contain bg-muted hover:opacity-80 transition-opacity"
                           />
                         </Link>
                       ) : (
                         <img
-                          src={getImageUrl(productImage)}
+                          src={productImage}
                           alt={productName}
                           className="h-20 w-20 rounded-lg object-contain bg-muted"
                         />
