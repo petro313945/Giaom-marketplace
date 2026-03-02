@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, BarChart3, Key } from 'lucide-react'
+import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, BarChart3, Key, Tags, Home } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -25,6 +25,8 @@ import * as orderService from '../../services/orderService'
 import * as reviewService from '../../services/reviewService'
 import * as reportService from '../../services/reportService'
 import * as payoutService from '../../services/payoutService'
+import * as categoryService from '../../services/categoryService'
+import * as homeSettingsService from '../../services/homeSettingsService'
 import RatingDisplay from '../../components/RatingDisplay'
 import { getFirstImageUrl } from '../../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
@@ -34,6 +36,16 @@ export default function AdminProfile() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Valid tab values
+  const validTabs = ['sellers', 'buyers', 'products', 'orders', 'reviews', 'reports', 'payouts', 'categories', 'home']
+  
+  // Get active tab from URL or use default
+  const urlTab = searchParams.get('tab')
+  const activeTab = (urlTab && validTabs.includes(urlTab)) 
+    ? urlTab 
+    : 'sellers'
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [sellersPagination, setSellersPagination] = useState({ page: 1, perPage: 10 })
@@ -107,6 +119,32 @@ export default function AdminProfile() {
     businessName: '',
     businessDescription: ''
   })
+  const [allCategories, setAllCategories] = useState<categoryService.Category[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(false)
+  const [createCategoryDialogOpen, setCreateCategoryDialogOpen] = useState(false)
+  const [editCategoryDialogOpen, setEditCategoryDialogOpen] = useState(false)
+  const [deleteCategoryDialogOpen, setDeleteCategoryDialogOpen] = useState(false)
+  const [categoryToDelete, setCategoryToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    slug: '',
+    description: ''
+  })
+  const [editingCategory, setEditingCategory] = useState({
+    name: '',
+    slug: '',
+    description: '',
+    isActive: true
+  })
+  const [creatingCategory, setCreatingCategory] = useState(false)
+  const [updatingCategory, setUpdatingCategory] = useState(false)
+  const [deletingCategory, setDeletingCategory] = useState(false)
+  const [homeSettings, setHomeSettings] = useState<homeSettingsService.HomeSettingsAdminResponse | null>(null)
+  const [homeSettingsLoading, setHomeSettingsLoading] = useState(false)
+  const [updatingHomeSettings, setUpdatingHomeSettings] = useState(false)
+  const [selectedFeaturedCategories, setSelectedFeaturedCategories] = useState<string[]>([])
+  const [selectedFeaturedProducts, setSelectedFeaturedProducts] = useState<string[]>([])
 
   const fetchProducts = async (page = 1) => {
     const response = await productService.getAllProducts({ page, limit: 10 })
@@ -194,6 +232,196 @@ export default function AdminProfile() {
     }
   }
 
+  const fetchCategories = async () => {
+    setCategoriesLoading(true)
+    try {
+      const response = await categoryService.getAllCategoriesAdmin()
+      setAllCategories(response.categories)
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch categories',
+        variant: 'destructive',
+      })
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }
+
+  const fetchHomeSettings = async () => {
+    setHomeSettingsLoading(true)
+    try {
+      const response = await homeSettingsService.getHomeSettingsAdmin()
+      setHomeSettings(response)
+      setSelectedFeaturedCategories(response.featuredCategoryIds)
+      setSelectedFeaturedProducts(response.featuredProductIds)
+    } catch (error) {
+      console.error('Failed to fetch home settings:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch home settings',
+        variant: 'destructive',
+      })
+    } finally {
+      setHomeSettingsLoading(false)
+    }
+  }
+
+  const handleUpdateHomeSettings = async () => {
+    if (selectedFeaturedCategories.length > 6) {
+      toast({
+        title: 'Validation Error',
+        description: 'You can only select up to 6 categories',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (selectedFeaturedProducts.length > 12) {
+      toast({
+        title: 'Validation Error',
+        description: 'You can only select up to 12 products',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setUpdatingHomeSettings(true)
+    try {
+      await homeSettingsService.updateHomeSettings({
+        featuredCategoryIds: selectedFeaturedCategories,
+        featuredProductIds: selectedFeaturedProducts
+      })
+      await fetchHomeSettings()
+      toast({
+        title: 'Success',
+        description: 'Home settings updated successfully',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to update home settings'
+      toast({
+        title: 'Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingHomeSettings(false)
+    }
+  }
+
+  const handleCreateCategory = async () => {
+    if (!newCategory.name || !newCategory.slug) {
+      toast({
+        title: 'Validation Error',
+        description: 'Name and slug are required.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setCreatingCategory(true)
+    try {
+      await categoryService.createCategory(newCategory)
+      await fetchCategories()
+      setCreateCategoryDialogOpen(false)
+      setNewCategory({ name: '', slug: '', description: '' })
+      toast({
+        title: 'Category Created',
+        description: 'Category has been created successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to create category'
+      toast({
+        title: 'Creation Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreatingCategory(false)
+    }
+  }
+
+  const handleEditCategory = (category: categoryService.Category) => {
+    const categoryId = category._id || category.id
+    setEditingCategoryId(categoryId || '')
+    setEditingCategory({
+      name: category.name,
+      slug: category.slug,
+      description: category.description || '',
+      isActive: category.isActive
+    })
+    setEditCategoryDialogOpen(true)
+  }
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategoryId || !editingCategory.name || !editingCategory.slug) {
+      toast({
+        title: 'Validation Error',
+        description: 'Name and slug are required.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setUpdatingCategory(true)
+    try {
+      await categoryService.updateCategory(editingCategoryId, editingCategory)
+      await fetchCategories()
+      setEditCategoryDialogOpen(false)
+      setEditingCategoryId(null)
+      setEditingCategory({ name: '', slug: '', description: '', isActive: true })
+      toast({
+        title: 'Category Updated',
+        description: 'Category has been updated successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to update category'
+      toast({
+        title: 'Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = (category: categoryService.Category) => {
+    const categoryId = category._id || category.id
+    const categoryName = category.name
+    setCategoryToDelete({ id: categoryId || '', name: categoryName })
+    setDeleteCategoryDialogOpen(true)
+  }
+
+  const handleDeleteCategoryConfirm = async () => {
+    if (!categoryToDelete) return
+
+    setDeletingCategory(true)
+    try {
+      await categoryService.deleteCategory(categoryToDelete.id)
+      await fetchCategories()
+      setDeleteCategoryDialogOpen(false)
+      setCategoryToDelete(null)
+      toast({
+        title: 'Category Deleted',
+        description: 'Category has been deleted successfully.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || 'Failed to delete category'
+      toast({
+        title: 'Deletion Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingCategory(false)
+    }
+  }
+
   const handleUpdatePayoutStatus = async (payoutId: string, status: string, failureReason?: string) => {
     setUpdatingPayoutId(payoutId)
     try {
@@ -251,6 +479,7 @@ export default function AdminProfile() {
         await fetchReviews(1)
         await fetchReports(1)
         await fetchPendingReportsCount()
+        await fetchCategories()
       } catch (error) {
         console.error('Failed to fetch admin data:', error)
       } finally {
@@ -260,6 +489,12 @@ export default function AdminProfile() {
 
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (activeTab === 'home') {
+      fetchHomeSettings()
+    }
+  }, [activeTab])
 
   const handleRoleChange = async (userId: string, newRole: 'customer' | 'seller' | 'admin') => {
     try {
@@ -640,7 +875,7 @@ export default function AdminProfile() {
         </div>
       </div>
 
-      <Tabs defaultValue="sellers" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })} className="space-y-6">
         <TabsList>
           <TabsTrigger value="sellers" className="gap-2">
             <Store className="h-4 w-4" />
@@ -658,6 +893,18 @@ export default function AdminProfile() {
             <Package className="h-4 w-4" />
             Orders
           </TabsTrigger>
+          <TabsTrigger value="payouts" className="gap-2">
+            <Wallet className="h-4 w-4" />
+            Payouts
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="gap-2">
+            <Tags className="h-4 w-4" />
+            Categories
+          </TabsTrigger>
+          <TabsTrigger value="home" className="gap-2">
+            <Home className="h-4 w-4" />
+            Home
+          </TabsTrigger>
           <TabsTrigger value="reviews" className="gap-2">
             <Star className="h-4 w-4" />
             Reviews
@@ -665,10 +912,6 @@ export default function AdminProfile() {
           <TabsTrigger value="reports" className="gap-2">
             <AlertCircle className="h-4 w-4" />
             Reports
-          </TabsTrigger>
-          <TabsTrigger value="payouts" className="gap-2">
-            <Wallet className="h-4 w-4" />
-            Payouts
           </TabsTrigger>
         </TabsList>
 
@@ -2100,6 +2343,416 @@ export default function AdminProfile() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Category Management</CardTitle>
+                  <CardDescription>Create, edit, and manage product categories</CardDescription>
+                </div>
+                <Button
+                  onClick={() => {
+                    setNewCategory({ name: '', slug: '', description: '' })
+                    setCreateCategoryDialogOpen(true)
+                  }}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Category
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {categoriesLoading ? (
+                <p className="text-muted-foreground">Loading categories...</p>
+              ) : allCategories.length === 0 ? (
+                <p className="text-muted-foreground">No categories yet</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium w-12">No.</th>
+                        <th className="px-4 py-3 text-left font-medium">Name</th>
+                        <th className="px-4 py-3 text-left font-medium">Description</th>
+                        <th className="px-4 py-3 text-left font-medium">Products</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allCategories.map((category, index) => {
+                        const categoryId = category._id || category.id
+                        return (
+                          <tr key={categoryId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
+                            <td className="px-4 py-3 font-medium">{category.name}</td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {category.description || '—'}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {category.productCount || 0}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge variant={category.isActive ? 'default' : 'secondary'}>
+                                {category.isActive ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleEditCategory(category)}
+                                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteCategory(category)}
+                                  disabled={category.productCount > 0}
+                                  title={category.productCount > 0 ? 'Cannot delete category with products' : ''}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Delete
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Create Category Dialog */}
+          <Dialog open={createCategoryDialogOpen} onOpenChange={setCreateCategoryDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Category</DialogTitle>
+                <DialogDescription>
+                  Add a new product category to the marketplace
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Name *</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border rounded-md"
+                    placeholder="Category Name"
+                    value={newCategory.name}
+                    onChange={(e) => {
+                      const name = e.target.value
+                      setNewCategory({
+                        ...newCategory,
+                        name,
+                        slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+                      })
+                    }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Slug *</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border rounded-md"
+                    placeholder="category-slug"
+                    value={newCategory.slug}
+                    onChange={(e) => setNewCategory({ ...newCategory, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    URL-friendly identifier (auto-generated from name)
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Description</label>
+                  <textarea
+                    className="w-full px-3 py-2 border rounded-md min-h-[100px]"
+                    placeholder="Category description..."
+                    value={newCategory.description}
+                    onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCreateCategoryDialogOpen(false)
+                    setNewCategory({ name: '', slug: '', description: '' })
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateCategory}
+                  disabled={creatingCategory || !newCategory.name || !newCategory.slug}
+                >
+                  {creatingCategory ? 'Creating...' : 'Create Category'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Category Dialog */}
+          <Dialog open={editCategoryDialogOpen} onOpenChange={setEditCategoryDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Category</DialogTitle>
+                <DialogDescription>
+                  Update category information
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Name *</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border rounded-md"
+                    placeholder="Category Name"
+                    value={editingCategory.name}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Slug *</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border rounded-md"
+                    placeholder="category-slug"
+                    value={editingCategory.slug}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Description</label>
+                  <textarea
+                    className="w-full px-3 py-2 border rounded-md min-h-[100px]"
+                    placeholder="Category description..."
+                    value={editingCategory.description}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <Select
+                    value={editingCategory.isActive ? 'active' : 'inactive'}
+                    onValueChange={(value) => setEditingCategory({ ...editingCategory, isActive: value === 'active' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditCategoryDialogOpen(false)
+                    setEditingCategoryId(null)
+                    setEditingCategory({ name: '', slug: '', description: '', isActive: true })
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpdateCategory}
+                  disabled={updatingCategory || !editingCategory.name || !editingCategory.slug}
+                >
+                  {updatingCategory ? 'Updating...' : 'Update Category'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Category Dialog */}
+          <AlertDialog open={deleteCategoryDialogOpen} onOpenChange={setDeleteCategoryDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Category</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {categoryToDelete && `Are you sure you want to delete category "${categoryToDelete.name}"? This action cannot be undone. Categories with products cannot be deleted.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteCategoryConfirm}
+                  disabled={deletingCategory}
+                >
+                  {deletingCategory ? 'Deleting...' : 'Delete'}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </TabsContent>
+
+        <TabsContent value="home" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Home Page Settings</CardTitle>
+                </div>
+                <Button
+                  onClick={handleUpdateHomeSettings}
+                  disabled={updatingHomeSettings || homeSettingsLoading}
+                  className="gap-2"
+                >
+                  {updatingHomeSettings ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {homeSettingsLoading ? (
+                <p className="text-muted-foreground">Loading home settings...</p>
+              ) : !homeSettings ? (
+                <p className="text-muted-foreground">No settings available</p>
+              ) : (
+                <div className="space-y-6">
+                  {/* Featured Categories Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Featured Categories (Max 6)</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {homeSettings.allCategories.map((category) => {
+                        const categoryId = category._id || category.id || ''
+                        const isSelected = selectedFeaturedCategories.includes(categoryId)
+                        return (
+                          <div
+                            key={categoryId}
+                            className={`border rounded-md p-2 cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/50'
+                            } ${!category.isActive ? 'opacity-50' : ''}`}
+                            onClick={() => {
+                              if (!category.isActive) return
+                              if (isSelected) {
+                                setSelectedFeaturedCategories(prev => prev.filter(id => id !== categoryId))
+                              } else {
+                                if (selectedFeaturedCategories.length < 6) {
+                                  setSelectedFeaturedCategories(prev => [...prev, categoryId])
+                                } else {
+                                  toast({
+                                    title: 'Limit Reached',
+                                    description: 'You can only select up to 6 categories',
+                                    variant: 'destructive',
+                                  })
+                                }
+                              }
+                            }}
+                          >
+                            <div className="flex items-start gap-1.5">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                disabled={!category.isActive}
+                                className="mt-0.5 w-3 h-3"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="text-xs font-medium truncate">{category.name}</span>
+                                  {!category.isActive && (
+                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">Inactive</Badge>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {category.productCount || 0} {category.productCount === 1 ? 'product' : 'products'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Featured Products Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Featured Products (Max 12)</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
+                      {homeSettings.allProducts.map((product) => {
+                        const productId = product._id || product.id || ''
+                        const isSelected = selectedFeaturedProducts.includes(productId)
+                        const imageUrl = getFirstImageUrl(product)
+                        return (
+                          <div
+                            key={productId}
+                            className={`border rounded-md p-2 cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/50'
+                            }`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedFeaturedProducts(prev => prev.filter(id => id !== productId))
+                              } else {
+                                if (selectedFeaturedProducts.length < 12) {
+                                  setSelectedFeaturedProducts(prev => [...prev, productId])
+                                } else {
+                                  toast({
+                                    title: 'Limit Reached',
+                                    description: 'You can only select up to 12 products',
+                                    variant: 'destructive',
+                                  })
+                                }
+                              }
+                            }}
+                          >
+                            <div className="flex flex-col gap-1.5">
+                              {imageUrl && (
+                                <img
+                                  src={imageUrl}
+                                  alt={product.title}
+                                  className="w-full h-20 object-contain rounded border bg-muted"
+                                />
+                              )}
+                              <div className="flex items-start gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  className="mt-0.5 w-3 h-3 flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-medium line-clamp-1 block truncate" title={product.title}>{product.title}</span>
+                                  <p className="text-xs font-semibold text-primary mt-0.5">${product.price}</p>
+                                  {product.category && (
+                                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{product.category}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
       <AlertDialog open={deleteUserDialogOpen} onOpenChange={setDeleteUserDialogOpen}>

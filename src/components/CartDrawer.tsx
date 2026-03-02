@@ -5,7 +5,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui
 import { ShoppingCart, Minus, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
+import { calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
 import { useToast } from '@/components/ui/use-toast'
+import { Badge } from './ui/badge'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -25,10 +27,23 @@ export default function CartDrawer() {
     if (!cart || !cart.items) return 0
     return cart.items.reduce((sum, item) => {
       const product = item.productId as any
+      const basePrice = typeof product === 'object' && product?.price ? product.price : 0
+      const bulkDiscountTiers = typeof product === 'object' ? product.bulkDiscountTiers : undefined
+      const itemTotal = calculateBulkDiscountTotal(basePrice, item.quantity, bulkDiscountTiers)
+      return sum + itemTotal
+    }, 0)
+  }
+
+  const calculateOriginalTotal = () => {
+    if (!cart || !cart.items) return 0
+    return cart.items.reduce((sum, item) => {
+      const product = item.productId as any
       const price = typeof product === 'object' && product?.price ? product.price : 0
       return sum + price * item.quantity
     }, 0)
   }
+
+  const totalDiscount = calculateOriginalTotal() - calculateTotal()
 
   return (
     <Sheet>
@@ -62,9 +77,14 @@ export default function CartDrawer() {
                   const product = item.productId as any
                   const productData = typeof product === 'object' ? product : null
                   const productName = productData?.title || 'Product'
-                  const productPrice = productData?.price || 0
+                  const basePrice = productData?.price || 0
+                  const bulkDiscountTiers = productData?.bulkDiscountTiers
                   const productImage = getFirstImageUrl(productData)
                   const productId = productData?.id || item.productId
+                  const itemTotal = calculateBulkDiscountTotal(basePrice, item.quantity, bulkDiscountTiers)
+                  const originalTotal = basePrice * item.quantity
+                  const itemDiscount = originalTotal - itemTotal
+                  const discountTier = getApplicableDiscountTier(item.quantity, bulkDiscountTiers)
 
                   return (
                     <div key={item.id || productId} className="flex gap-4 border-b pb-4">
@@ -77,7 +97,20 @@ export default function CartDrawer() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium truncate" title={productName}>{productName}</h3>
-                        <p className="text-lg font-bold mt-1">${productPrice.toFixed(2)}</p>
+                        {discountTier ? (
+                          <div className="mt-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-lg font-bold">${itemTotal.toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground line-through">${originalTotal.toFixed(2)}</p>
+                              <Badge variant="destructive" className="text-xs">
+                                {discountTier.discountPercent}% OFF
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-green-600">Save ${itemDiscount.toFixed(2)}</p>
+                          </div>
+                        ) : (
+                          <p className="text-lg font-bold mt-1">${itemTotal.toFixed(2)}</p>
+                        )}
                         <div className="flex items-center gap-2 mt-2">
                           <Button
                             variant="outline"
@@ -141,6 +174,18 @@ export default function CartDrawer() {
                 })}
               </div>
               <div className="border-t pt-4 space-y-4">
+                {totalDiscount > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span>Subtotal:</span>
+                    <span className="line-through text-muted-foreground">${calculateOriginalTotal().toFixed(2)}</span>
+                  </div>
+                )}
+                {totalDiscount > 0 && (
+                  <div className="flex justify-between items-center text-sm text-green-600">
+                    <span>Discount:</span>
+                    <span>-${totalDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-lg font-bold">
                   <span>Total:</span>
                   <span>${calculateTotal().toFixed(2)}</span>

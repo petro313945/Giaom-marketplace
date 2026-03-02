@@ -6,7 +6,7 @@ import { Star } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ui/use-toast'
-import * as productService from '../services/productService'
+import * as homeSettingsService from '../services/homeSettingsService'
 import { getFirstImageUrl } from '../utils/imageUtils'
 import ProductRating from './ProductRating'
 import VariantSelectionModal from './VariantSelectionModal'
@@ -25,10 +25,13 @@ export default function FeaturedProducts() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await productService.getProducts({ limit: 6 })
-        setProducts(response.products)
+        const response = await homeSettingsService.getHomeSettings()
+        // Limit to 12 products
+        setProducts(response.featuredProducts.slice(0, 12))
       } catch (error) {
-        console.error('Failed to fetch products:', error)
+        console.error('Failed to fetch featured products:', error)
+        // Fallback to empty array if API fails
+        setProducts([])
       } finally {
         setLoading(false)
       }

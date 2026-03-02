@@ -12,13 +12,13 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Upload, X, Plus, Sparkles } from 'lucide-react'
+import { Upload, X, Plus, Sparkles, Percent } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import * as productService from '../services/productService'
 import * as categoryService from '../services/categoryService'
 import { uploadImage } from '../services/uploadService'
 import { getImageUrl } from '../utils/imageUtils'
-import type { Product, ProductVariant } from '../services/productService'
+import type { Product, ProductVariant, BulkDiscountTier } from '../services/productService'
 
 interface EditProductFormProps {
   product: Product | null
@@ -62,7 +62,16 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
   const [bulkPrice, setBulkPrice] = useState<string>('')
   const [priceAdjustment, setPriceAdjustment] = useState<string>('')
   
+  // Bulk discount tiers state
+  const [discountTiers, setDiscountTiers] = useState<BulkDiscountTier[]>([])
+  
+  // Variant images state - maps variant index to array of ImageItem
+  const [variantImages, setVariantImages] = useState<Map<number, ImageItem[]>>(new Map())
+  // Variant URL input refs - maps variant index to URL input element
+  const variantUrlInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const variantFileInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
   const { register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<ProductFormData>()
   const selectedCategory = watch('category')
   
@@ -108,6 +117,19 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
             const productVariants = fullProduct.variants || []
             setVariants(productVariants)
             setProductType(productVariants.length > 0 ? 'variants' : 'simple')
+            setDiscountTiers(fullProduct.bulkDiscountTiers || [])
+            // Initialize variant images from existing data
+            const variantImgsMap = new Map<number, ImageItem[]>()
+            productVariants.forEach((variant, index) => {
+              if (variant.imageUrls && variant.imageUrls.length > 0) {
+                variantImgsMap.set(index, variant.imageUrls.map(url => ({
+                  id: `existing-${index}-${url}`,
+                  type: 'url' as const,
+                  url
+                })))
+              }
+            })
+            setVariantImages(variantImgsMap)
             setError(null)
           })
           .catch(() => {
@@ -130,6 +152,19 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
             const productVariants = product.variants || []
             setVariants(productVariants)
             setProductType(productVariants.length > 0 ? 'variants' : 'simple')
+            setDiscountTiers(product.bulkDiscountTiers || [])
+            // Initialize variant images from existing data
+            const variantImgsMap = new Map<number, ImageItem[]>()
+            productVariants.forEach((variant, index) => {
+              if (variant.imageUrls && variant.imageUrls.length > 0) {
+                variantImgsMap.set(index, variant.imageUrls.map(url => ({
+                  id: `existing-${index}-${url}`,
+                  type: 'url' as const,
+                  url
+                })))
+              }
+            })
+            setVariantImages(variantImgsMap)
             setError(null)
           })
       } else {
@@ -151,12 +186,27 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         const productVariants = product.variants || []
         setVariants(productVariants)
         setProductType(productVariants.length > 0 ? 'variants' : 'simple')
+        setDiscountTiers(product.bulkDiscountTiers || [])
+        // Initialize variant images from existing data
+        const variantImgsMap = new Map<number, ImageItem[]>()
+        productVariants.forEach((variant, index) => {
+          if (variant.imageUrls && variant.imageUrls.length > 0) {
+            variantImgsMap.set(index, variant.imageUrls.map(url => ({
+              id: `existing-${index}-${url}`,
+              type: 'url' as const,
+              url
+            })))
+          }
+        })
+        setVariantImages(variantImgsMap)
         setError(null)
       }
     } else {
       setProductData(null)
       setVariants([])
+      setVariantImages(new Map())
       setProductType('simple')
+      setDiscountTiers([])
     }
   }, [product, open, reset, setValue])
 
@@ -237,7 +287,96 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
     setProductType(type)
     if (type === 'simple') {
       setVariants([])
+      setVariantImages(new Map())
     }
+  }
+
+  // Handle variant image file selection
+  const handleVariantFileSelect = (variantIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files) {
+      const newImages: ImageItem[] = []
+      Array.from(files).forEach((file) => {
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+          setError('Please select image files only')
+          return
+        }
+        // Validate file size (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          setError('Image size must be less than 5MB')
+          return
+        }
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const imageItem: ImageItem = {
+            id: Date.now().toString() + Math.random(),
+            type: 'file',
+            file,
+            preview: reader.result as string
+          }
+          setVariantImages((prev) => {
+            const newMap = new Map(prev)
+            const existing = newMap.get(variantIndex) || []
+            newMap.set(variantIndex, [...existing, imageItem])
+            return newMap
+          })
+        }
+        reader.readAsDataURL(file)
+      })
+      setError(null)
+      const input = variantFileInputRefs.current.get(variantIndex)
+      if (input) {
+        input.value = ''
+      }
+    }
+  }
+
+  // Handle variant image URL input
+  const handleVariantImageUrlAdd = (variantIndex: number, url: string) => {
+    if (!url.trim()) {
+      console.log('Empty URL, returning')
+      return
+    }
+    
+    let validUrl = url.trim()
+    
+    // If URL doesn't start with http:// or https://, add https://
+    if (!validUrl.startsWith('http://') && !validUrl.startsWith('https://')) {
+      validUrl = `https://${validUrl}`
+    }
+    
+    try {
+      new URL(validUrl) // Validate URL
+      const imageItem: ImageItem = {
+        id: Date.now().toString() + Math.random(),
+        type: 'url',
+        url: validUrl
+      }
+      console.log('Adding variant image:', { variantIndex, url: validUrl, imageItem })
+      setVariantImages((prev) => {
+        const newMap = new Map(prev)
+        const existing = newMap.get(variantIndex) || []
+        const updated = [...existing, imageItem]
+        newMap.set(variantIndex, updated)
+        console.log('Updated variant images:', { variantIndex, count: updated.length, allImages: Array.from(newMap.entries()) })
+        return newMap
+      })
+      setError(null)
+    } catch (err) {
+      console.error('Invalid URL:', err)
+      setError('Please enter a valid URL')
+    }
+  }
+
+  // Remove variant image
+  const handleRemoveVariantImage = (variantIndex: number, imageId: string) => {
+    setVariantImages((prev) => {
+      const newMap = new Map(prev)
+      const existing = newMap.get(variantIndex) || []
+      newMap.set(variantIndex, existing.filter((img) => img.id !== imageId))
+      return newMap
+    })
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -353,19 +492,106 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         }
       }
 
+      // Upload variant images
+      const variantImageUrls: Map<number, string[]> = new Map()
+      
+      console.log('Processing variant images for save:', { 
+        variantImagesSize: variantImages.size, 
+        variantImages: Array.from(variantImages.entries()),
+        variantsLength: variants.length 
+      })
+      
+      if (variantImages.size > 0) {
+        setIsUploading(true)
+        try {
+          for (const [variantIndex, images] of variantImages.entries()) {
+            // Skip if variant index is out of bounds
+            if (variantIndex >= variants.length) {
+              console.warn(`Variant index ${variantIndex} is out of bounds (variants.length: ${variants.length})`)
+              continue
+            }
+            
+            const urls: string[] = []
+            
+            // Upload file images
+            const fileImages = images.filter((img) => img.type === 'file' && img.file)
+            console.log(`Variant ${variantIndex}: ${fileImages.length} file images to upload`)
+            for (const imageItem of fileImages) {
+              if (imageItem.file) {
+                const uploadResponse = await uploadImage(imageItem.file)
+                urls.push(uploadResponse.imageUrl)
+              }
+            }
+            
+            // Add URL images (both new and existing)
+            const urlImages = images.filter((img) => img.type === 'url' && img.url)
+            console.log(`Variant ${variantIndex}: ${urlImages.length} URL images to add`, urlImages)
+            urlImages.forEach((img) => {
+              if (img.url && img.url.trim()) {
+                urls.push(img.url.trim())
+              }
+            })
+            
+            // Remove duplicates and empty strings
+            const uniqueUrls = Array.from(new Set(urls.filter(url => url.length > 0)))
+            console.log(`Variant ${variantIndex}: Final URLs:`, uniqueUrls)
+            
+            if (uniqueUrls.length > 0) {
+              variantImageUrls.set(variantIndex, uniqueUrls)
+            }
+          }
+        } catch (uploadErr: any) {
+          console.error('Error uploading variant images:', uploadErr)
+          setError(uploadErr.response?.data?.error || uploadErr.message || 'Failed to upload variant images')
+          setIsLoading(false)
+          setIsUploading(false)
+          return
+        } finally {
+          setIsUploading(false)
+        }
+      }
+      
+      console.log('Variant image URLs to save:', Array.from(variantImageUrls.entries()))
+      
+      // Also preserve existing variant images that weren't modified
+      if (currentProduct.variants && variants.length > 0) {
+        variants.forEach((variant, index) => {
+          // Only preserve if we don't have new images for this variant
+          if (!variantImageUrls.has(index)) {
+            // Find matching variant in original product by size/color
+            const originalVariant = currentProduct.variants?.find(ov => 
+              ov.size === variant.size && 
+              ov.color === variant.color
+            )
+            
+            // If found and has images, preserve them
+            if (originalVariant && originalVariant.imageUrls && originalVariant.imageUrls.length > 0) {
+              variantImageUrls.set(index, [...originalVariant.imageUrls])
+            }
+          }
+        })
+      }
+
       // Format variants for submission (remove undefined values and empty strings)
       const formattedVariants = variants.length > 0 
         ? variants
-            .map(v => ({
-              size: v.size && v.size.trim() ? v.size.trim() : undefined,
-              color: v.color && v.color.trim() ? v.color.trim() : undefined,
-              price: v.price !== undefined && v.price > 0 ? v.price : undefined,
-              stock: v.stock
-            }))
+            .map((v, index) => {
+              const imageUrls = variantImageUrls.get(index)
+              console.log(`Formatting variant ${index}:`, { size: v.size, color: v.color, imageUrls })
+              return {
+                size: v.size && v.size.trim() ? v.size.trim() : undefined,
+                color: v.color && v.color.trim() ? v.color.trim() : undefined,
+                price: v.price !== undefined && v.price > 0 ? v.price : undefined,
+                stock: v.stock,
+                imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : undefined
+              }
+            })
             .filter(v => v.size || v.color) // Remove variants with no size or color
         : []
-
-      await productService.updateProduct(currentProduct._id || currentProduct.id!, {
+      
+      console.log('Formatted variants for submission:', formattedVariants)
+      
+      const updateData = {
         title: data.title,
         description: data.description,
         price: parseFloat(data.price),
@@ -373,7 +599,16 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
         stockQuantity: productType === 'simple' ? parseInt(data.stockQuantity) || 0 : 0,
         variants: productType === 'variants' ? formattedVariants : [],
-      })
+        bulkDiscountTiers: discountTiers.length > 0 ? discountTiers : [],
+      }
+      
+      console.log('Sending update request with data:', JSON.stringify(updateData, null, 2))
+      console.log('Variants in update data:', updateData.variants)
+
+      const response = await productService.updateProduct(currentProduct._id || currentProduct.id!, updateData)
+      
+      console.log('Update response:', response)
+      console.log('Updated product variants:', response.product?.variants)
 
       toast({
         title: 'Product Updated',
@@ -663,80 +898,180 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
                       </Button>
                     )}
                   </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {variants.map((variant, index) => (
-                      <div key={index} className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end p-2 border rounded bg-background">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Size</Label>
-                          <Input
-                            placeholder="e.g., S, M, L"
-                            value={variant.size || ''}
-                            onChange={(e) => {
-                              const newVariants = [...variants]
-                              newVariants[index] = { ...variant, size: e.target.value || undefined }
-                              setVariants(newVariants)
-                            }}
-                            className="text-sm"
-                          />
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {variants.map((variant, index) => {
+                      const variantImgs = variantImages.get(index) || []
+                      return (
+                        <div key={index} className="border rounded-lg p-3 bg-background space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Size</Label>
+                              <Input
+                                placeholder="e.g., S, M, L"
+                                value={variant.size || ''}
+                                onChange={(e) => {
+                                  const newVariants = [...variants]
+                                  newVariants[index] = { ...variant, size: e.target.value || undefined }
+                                  setVariants(newVariants)
+                                }}
+                                className="text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Color</Label>
+                              <Input
+                                placeholder="e.g., Red, Blue"
+                                value={variant.color || ''}
+                                onChange={(e) => {
+                                  const newVariants = [...variants]
+                                  newVariants[index] = { ...variant, color: e.target.value || undefined }
+                                  setVariants(newVariants)
+                                }}
+                                className="text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Price ($)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Base price"
+                                value={variant.price || ''}
+                                onChange={(e) => {
+                                  const newVariants = [...variants]
+                                  newVariants[index] = { 
+                                    ...variant, 
+                                    price: e.target.value ? parseFloat(e.target.value) : undefined 
+                                  }
+                                  setVariants(newVariants)
+                                }}
+                                className="text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Stock *</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={variant.stock}
+                                onChange={(e) => {
+                                  const newVariants = [...variants]
+                                  newVariants[index] = { ...variant, stock: parseInt(e.target.value) || 0 }
+                                  setVariants(newVariants)
+                                }}
+                                className="text-sm"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setVariants(variants.filter((_, i) => i !== index))
+                                setVariantImages((prev) => {
+                                  const newMap = new Map(prev)
+                                  newMap.delete(index)
+                                  return newMap
+                                })
+                              }}
+                              className="text-destructive"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          
+                          {/* Variant Images Section */}
+                          <div className="space-y-2 border-t pt-2">
+                            <Label className="text-xs font-medium">Variant Images (Optional)</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {variantImgs.map((img) => (
+                                <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden">
+                                  <img
+                                    src={img.preview || (img.url ? getImageUrl(img.url) : '')}
+                                    alt="Variant preview"
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="absolute top-0 right-0 h-6 w-6 p-0 bg-destructive/80 hover:bg-destructive text-white"
+                                    onClick={() => handleRemoveVariantImage(index, img.id)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                ref={(el) => {
+                                  if (el) {
+                                    variantFileInputRefs.current.set(index, el)
+                                  } else {
+                                    variantFileInputRefs.current.delete(index)
+                                  }
+                                }}
+                                onChange={(e) => handleVariantFileSelect(index, e)}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => variantFileInputRefs.current.get(index)?.click()}
+                                className="text-xs"
+                              >
+                                <Upload className="h-3 w-3 mr-1" />
+                                Upload
+                              </Button>
+                              <Input
+                                type="url"
+                                placeholder="Or paste image URL"
+                                className="text-xs flex-1"
+                                ref={(el) => {
+                                  if (el) {
+                                    variantUrlInputRefs.current.set(index, el)
+                                  } else {
+                                    variantUrlInputRefs.current.delete(index)
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    const url = e.currentTarget.value.trim()
+                                    if (url) {
+                                      handleVariantImageUrlAdd(index, url)
+                                      e.currentTarget.value = ''
+                                    }
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const input = variantUrlInputRefs.current.get(index)
+                                  if (input && input.value.trim()) {
+                                    handleVariantImageUrlAdd(index, input.value.trim())
+                                    input.value = ''
+                                  }
+                                }}
+                                className="text-xs"
+                              >
+                                Add
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Color</Label>
-                          <Input
-                            placeholder="e.g., Red, Blue"
-                            value={variant.color || ''}
-                            onChange={(e) => {
-                              const newVariants = [...variants]
-                              newVariants[index] = { ...variant, color: e.target.value || undefined }
-                              setVariants(newVariants)
-                            }}
-                            className="text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Price ($)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="Base price"
-                            value={variant.price || ''}
-                            onChange={(e) => {
-                              const newVariants = [...variants]
-                              newVariants[index] = { 
-                                ...variant, 
-                                price: e.target.value ? parseFloat(e.target.value) : undefined 
-                              }
-                              setVariants(newVariants)
-                            }}
-                            className="text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Stock *</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={variant.stock}
-                            onChange={(e) => {
-                              const newVariants = [...variants]
-                              newVariants[index] = { ...variant, stock: parseInt(e.target.value) || 0 }
-                              setVariants(newVariants)
-                            }}
-                            className="text-sm"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setVariants(variants.filter((_, i) => i !== index))}
-                          className="text-destructive"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     * Each variant must have at least a size or color, and stock is required. Price is optional and will use base price if not set.
@@ -745,6 +1080,87 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
               )}
             </div>
           )}
+
+          {/* Bulk Discount Tiers Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Percent className="h-4 w-4 text-primary" />
+                <Label>Bulk Discount Tiers</Label>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDiscountTiers([...discountTiers, { minQuantity: 1, discountPercent: 0 }])}
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Discount Tier
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Set quantity-based discounts. Customers get the best applicable discount based on quantity purchased.
+            </p>
+            
+            {discountTiers.length > 0 && (
+              <div className="space-y-2 border rounded-lg p-4">
+                <div className="space-y-3">
+                  {discountTiers.map((tier, index) => (
+                    <div key={index} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end p-2 border rounded bg-background">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Min Quantity *</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          placeholder="e.g., 5"
+                          value={tier.minQuantity}
+                          onChange={(e) => {
+                            const newTiers = [...discountTiers]
+                            newTiers[index] = { ...tier, minQuantity: parseInt(e.target.value) || 1 }
+                            setDiscountTiers(newTiers)
+                          }}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Discount % *</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          placeholder="e.g., 10"
+                          value={tier.discountPercent}
+                          onChange={(e) => {
+                            const newTiers = [...discountTiers]
+                            newTiers[index] = { ...tier, discountPercent: parseFloat(e.target.value) || 0 }
+                            setDiscountTiers(newTiers)
+                          }}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDiscountTiers(discountTiers.filter((_, i) => i !== index))}
+                          className="text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  * Minimum quantity must be at least 1. Discount percentage must be between 0 and 100.
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-2">
             <Label>Images</Label>

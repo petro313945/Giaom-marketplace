@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Home from './pages/Home'
 import ProductDetail from './pages/ProductDetail'
 import Category from './pages/Category'
+import Store from './pages/Store'
 import Search from './pages/Search'
 import OrderDetail from './pages/OrderDetail'
 import Login from './pages/Login'
@@ -29,6 +30,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/category/:slug" element={<Category />} />
+              <Route path="/store/:sellerId" element={<Store />} />
               <Route path="/search" element={<Search />} />
               <Route 
                 path="/order/:id" 

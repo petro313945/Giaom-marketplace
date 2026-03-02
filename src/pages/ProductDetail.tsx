@@ -21,6 +21,7 @@ import ReviewForm from '../components/ReviewForm'
 import ReportDialog from '../components/ReportDialog'
 import ImageZoom from '../components/ImageZoom'
 import { getImageUrl } from '../utils/imageUtils'
+import { calculateBulkDiscountPrice, calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
 import type { Product } from '../services/productService'
 import type { ReviewStats, Review } from '../services/reviewService'
 
@@ -295,8 +296,8 @@ export default function ProductDetail() {
     return product.stockQuantity || 0
   }
 
-  // Get price for selected variant or product
-  const getDisplayPrice = () => {
+  // Get base price for selected variant or product
+  const getBasePrice = () => {
     if (!product) return 0
     if (selectedVariant && product.variants && product.variants.length > 0) {
       const matchingVariant = product.variants.find(v => {
@@ -310,6 +311,145 @@ export default function ProductDetail() {
     }
     return product.price
   }
+
+  // Get price with discount applied
+  const getDisplayPrice = () => {
+    const basePrice = getBasePrice()
+    if (!product || !product.bulkDiscountTiers || product.bulkDiscountTiers.length === 0) {
+      return basePrice
+    }
+    return calculateBulkDiscountPrice(basePrice, quantity, product.bulkDiscountTiers)
+  }
+
+  // Get total price with discount
+  const getTotalPrice = () => {
+    const basePrice = getBasePrice()
+    if (!product || !product.bulkDiscountTiers || product.bulkDiscountTiers.length === 0) {
+      return basePrice * quantity
+    }
+    return calculateBulkDiscountTotal(basePrice, quantity, product.bulkDiscountTiers)
+  }
+
+  // Get applicable discount tier
+  const getCurrentDiscountTier = () => {
+    if (!product || !product.bulkDiscountTiers) return null
+    return getApplicableDiscountTier(quantity, product.bulkDiscountTiers)
+  }
+
+  // Get the matching variant object based on selected variant
+  // Prioritizes variants with images when multiple matches exist
+  const getMatchingVariant = () => {
+    if (!product || !product.variants || !selectedVariant) return null
+    
+    // Find all matching variants
+    const matchingVariants = product.variants.filter(v => {
+      const sizeMatch = !selectedVariant.size || v.size === selectedVariant.size
+      const colorMatch = !selectedVariant.color || v.color === selectedVariant.color
+      return sizeMatch && colorMatch
+    })
+    
+    if (matchingVariants.length === 0) return null
+    
+    // Prioritize variant with images if available
+    const variantWithImages = matchingVariants.find(v => v.imageUrls && v.imageUrls.length > 0)
+    if (variantWithImages) return variantWithImages
+    
+    // Otherwise return the first matching variant
+    return matchingVariants[0]
+  }
+
+  // Get main product images only (for thumbnail list)
+  const getMainProductImages = () => {
+    if (!product) return []
+    
+    if (product.imageUrls && product.imageUrls.length > 0) {
+      return product.imageUrls
+    }
+    
+    if (product.imageUrl) {
+      return [product.imageUrl]
+    }
+    
+    return []
+  }
+
+  // Get images to display (variant images if available, with fallback to product images)
+  const getDisplayImages = () => {
+    if (!product) return []
+    
+    const matchingVariant = getMatchingVariant()
+    const variantImages: string[] = []
+    const productImages: string[] = []
+    
+    // Get variant images if available
+    if (matchingVariant && matchingVariant.imageUrls && matchingVariant.imageUrls.length > 0) {
+      variantImages.push(...matchingVariant.imageUrls)
+    }
+    
+    // Get product images
+    if (product.imageUrls && product.imageUrls.length > 0) {
+      productImages.push(...product.imageUrls)
+    } else if (product.imageUrl) {
+      productImages.push(product.imageUrl)
+    }
+    
+    // If variant has images, combine them with product images (variant first, then product)
+    // Remove duplicates to avoid showing the same image twice
+    if (variantImages.length > 0) {
+      const combined = [...variantImages]
+      productImages.forEach(img => {
+        if (!combined.includes(img)) {
+          combined.push(img)
+        }
+      })
+      return combined
+    }
+    
+    // Otherwise, return product images
+    return productImages
+  }
+
+  // Reset image index when variant changes and ensure it's within bounds
+  useEffect(() => {
+    if (!product) return
+    
+    let displayImages: string[] = []
+    
+    // Find matching variant if variant is selected
+    if (selectedVariant && product.variants && product.variants.length > 0) {
+      const matchingVariants = product.variants.filter(v => {
+        const sizeMatch = !selectedVariant.size || v.size === selectedVariant.size
+        const colorMatch = !selectedVariant.color || v.color === selectedVariant.color
+        return sizeMatch && colorMatch
+      })
+      
+      // Prioritize variant with images
+      const variantWithImages = matchingVariants.find(v => v.imageUrls && v.imageUrls.length > 0)
+      const matchingVariant = variantWithImages || matchingVariants[0]
+      
+      if (matchingVariant && matchingVariant.imageUrls && matchingVariant.imageUrls.length > 0) {
+        displayImages = matchingVariant.imageUrls
+      }
+    }
+    
+    // Fallback to product images if no variant images
+    if (displayImages.length === 0) {
+      if (product.imageUrls && product.imageUrls.length > 0) {
+        displayImages = product.imageUrls
+      } else if (product.imageUrl) {
+        displayImages = [product.imageUrl]
+      }
+    }
+    
+    if (displayImages.length > 0) {
+      // Reset to first image, or keep current index if still valid
+      setSelectedImageIndex(prev => {
+        return prev < displayImages.length ? prev : 0
+      })
+    } else {
+      setSelectedImageIndex(0)
+    }
+  }, [selectedVariant, product])
 
   // Format purchase count (e.g., "1K+", "500+", "50+")
   const formatPurchaseCount = (count: number): string => {
@@ -436,58 +576,122 @@ export default function ProductDetail() {
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="flex flex-row gap-4">
-          {/* Vertical Thumbnail Strip (Left) */}
-          {(product.imageUrls && product.imageUrls.length > 1) && (
-            <div className="flex flex-col gap-2 flex-shrink-0">
-              {product.imageUrls.map((imageUrl, index) => (
-                <button
-                  key={index}
-                  className={`relative w-16 h-16 sm:w-20 sm:h-20 overflow-hidden rounded-lg border-2 transition-all flex-shrink-0 ${
-                    selectedImageIndex === index 
-                      ? 'border-primary ring-2 ring-primary/20' 
-                      : 'border-transparent hover:border-muted-foreground/30'
-                  }`}
-                  onClick={() => setSelectedImageIndex(index)}
-                >
-                  <img
-                    src={getImageUrl(imageUrl)}
-                    alt={`${product.title} - Image ${index + 1}`}
-                    className="w-full h-full object-contain bg-muted"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Vertical Thumbnail Strip (Left) - Show only main product images */}
+          {(() => {
+            const mainProductImages = getMainProductImages()
+            const displayImages = getDisplayImages()
+            return mainProductImages.length > 1 && (
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                {mainProductImages.map((imageUrl, index) => {
+                  // Find this image's index in the displayImages array
+                  const displayIndex = displayImages.findIndex(img => img === imageUrl)
+                  const isSelected = displayIndex !== -1 && selectedImageIndex === displayIndex
+                  
+                  return (
+                    <button
+                      key={index}
+                      className={`relative w-16 h-16 sm:w-20 sm:h-20 overflow-hidden rounded-lg border-2 transition-all flex-shrink-0 ${
+                        isSelected
+                          ? 'border-primary ring-2 ring-primary/20' 
+                          : 'border-transparent hover:border-muted-foreground/30'
+                      }`}
+                      onClick={() => {
+                        // Set index to the position in displayImages array
+                        if (displayIndex !== -1) {
+                          setSelectedImageIndex(displayIndex)
+                        }
+                      }}
+                    >
+                      <img
+                        src={getImageUrl(imageUrl)}
+                        alt={`${product.title} - Image ${index + 1}`}
+                        className="w-full h-full object-contain bg-muted"
+                      />
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
           
-          {/* Main Image (Right of thumbnails) */}
-          <div className="relative flex-1 min-w-0 bg-muted rounded-lg border overflow-visible">
-            <div className="overflow-hidden rounded-lg">
-              <ImageZoom
-                src={getImageUrl(
-                  (product.imageUrls && product.imageUrls.length > 0) 
-                    ? product.imageUrls[selectedImageIndex] 
-                    : product.imageUrl
-                )}
-                alt={product.title}
-                className="w-full aspect-[4/5] main-product-image"
-                zoomLevel={3}
-              />
+          {/* Main Image Container and Info Sections */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {/* Main Image (Right of thumbnails) */}
+            <div className="relative bg-muted rounded-lg border overflow-visible">
+              <div className="overflow-hidden rounded-lg">
+                {(() => {
+                  const displayImages = getDisplayImages()
+                  const imageUrl = displayImages.length > 0 
+                    ? (displayImages[selectedImageIndex] || displayImages[0])
+                    : (product.imageUrl || '')
+                  return (
+                    <ImageZoom
+                      src={getImageUrl(imageUrl)}
+                      alt={product.title}
+                      className="w-full aspect-[4/5] main-product-image"
+                      zoomLevel={3}
+                    />
+                  )
+                })()}
+              </div>
             </div>
+            
+            {/* Shipping/Returns/Payment Info - Below Main Image */}
+            <div className="mt-6 space-y-3 text-sm">
+              <div className="flex items-start gap-2">
+                <Truck className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium">Free Shipping</span>
+                  <p className="text-muted-foreground text-xs">Available on orders over $50</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <RotateCcw className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium">Free Returns</span>
+                  <p className="text-muted-foreground text-xs">30-day return policy</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium">Secure Payment</span>
+                  <p className="text-muted-foreground text-xs">Your payment information is protected</p>
+                </div>
+              </div>
+            </div>
+
+            {/* About this item - Below Main Image */}
+            {product.description && (
+              <div className="mt-6">
+                <h2 className="text-xl font-semibold mb-2">About this item</h2>
+                <p className="text-muted-foreground text-sm">{product.description}</p>
+              </div>
+            )}
           </div>
         </div>
         <div className="space-y-6">
           <div>
             {/* Seller/Store Name */}
-            {product.sellerId && typeof product.sellerId === 'object' && (product.sellerId.businessName || product.sellerId.fullName) && (
-              <div className="mb-2">
-                <Link 
-                  to="#" 
-                  className="text-sm text-primary hover:underline"
-                >
-                  Visit the {product.sellerId.businessName || product.sellerId.fullName} Store
-                </Link>
-              </div>
-            )}
+            {product.sellerId && (() => {
+              const sellerIdValue = typeof product.sellerId === 'object' 
+                ? ((product.sellerId as any)._id || (product.sellerId as any).id || product.sellerId)
+                : product.sellerId;
+              const storeName = typeof product.sellerId === 'object' 
+                ? (product.sellerId.businessName || product.sellerId.fullName)
+                : null;
+              
+              return sellerIdValue && storeName ? (
+                <div className="mb-2">
+                  <Link 
+                    to={`/store/${sellerIdValue}`}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Visit the {storeName} Store
+                  </Link>
+                </div>
+              ) : null;
+            })()}
             
             <h1 className="text-2xl font-semibold mb-2">{product.title}</h1>
             
@@ -523,34 +727,61 @@ export default function ProductDetail() {
             {/* Price Information */}
             <div className="mb-4">
               <div className="flex items-baseline gap-2 mb-1">
-                <p className="text-3xl font-bold">${getDisplayPrice().toFixed(2)}</p>
+                {getCurrentDiscountTier() ? (
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-3xl font-bold">${getDisplayPrice().toFixed(2)}</p>
+                    <p className="text-lg text-muted-foreground line-through">${getBasePrice().toFixed(2)}</p>
+                    <Badge variant="destructive" className="ml-2">
+                      {getCurrentDiscountTier()?.discountPercent}% OFF
+                    </Badge>
+                  </div>
+                ) : (
+                  <p className="text-3xl font-bold">${getDisplayPrice().toFixed(2)}</p>
+                )}
               </div>
+              {getCurrentDiscountTier() && (
+                <div className="text-sm text-green-600 font-medium">
+                  Save ${((getBasePrice() - getDisplayPrice()) * quantity).toFixed(2)} on {quantity} {quantity === 1 ? 'item' : 'items'}
+                </div>
+              )}
+              {quantity > 1 && (
+                <div className="text-sm text-muted-foreground mt-1">
+                  Total: ${getTotalPrice().toFixed(2)} for {quantity} {quantity === 1 ? 'item' : 'items'}
+                </div>
+              )}
             </div>
 
-            {/* Essential Product Information */}
-            <div className="space-y-2 text-sm border-t border-b py-4 my-4">
-              <div className="flex items-start gap-2">
-                <Truck className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium">Free Shipping</span>
-                  <p className="text-muted-foreground text-xs">Available on orders over $50</p>
+            {/* Bulk Discount Tiers Display */}
+            {product.bulkDiscountTiers && product.bulkDiscountTiers.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm font-semibold mb-2">Bulk Discounts Available:</p>
+                <div className="space-y-1">
+                  {product.bulkDiscountTiers
+                    .sort((a, b) => a.minQuantity - b.minQuantity)
+                    .map((tier, index) => {
+                      const isActive = quantity >= tier.minQuantity
+                      const tierPrice = calculateBulkDiscountPrice(getBasePrice(), tier.minQuantity, product.bulkDiscountTiers)
+                      return (
+                        <div
+                          key={index}
+                          className={`text-xs flex items-center justify-between p-2 rounded ${
+                            isActive ? 'bg-primary/10 border border-primary' : 'bg-background'
+                          }`}
+                        >
+                          <span>
+                            Buy {tier.minQuantity}+ {tier.minQuantity === 1 ? 'item' : 'items'}: 
+                            <span className="font-semibold ml-1">{tier.discountPercent}% OFF</span>
+                          </span>
+                          <span className="text-muted-foreground">
+                            ${tierPrice.toFixed(2)}/unit
+                          </span>
+                        </div>
+                      )
+                    })}
                 </div>
               </div>
-              <div className="flex items-start gap-2">
-                <RotateCcw className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium">Free Returns</span>
-                  <p className="text-muted-foreground text-xs">30-day return policy</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium">Secure Payment</span>
-                  <p className="text-muted-foreground text-xs">Your payment information is protected</p>
-                </div>
-              </div>
-            </div>
+            )}
+
           </div>
 
           {/* Variant Selector */}
@@ -673,16 +904,16 @@ export default function ProductDetail() {
             </div>
           </div>
 
-          {product.description && (
+          <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold mb-2">About this item</h2>
-              <p className="text-muted-foreground">{product.description}</p>
+              <p className="text-sm text-muted-foreground mb-1">Category</p>
+              <p className="font-medium capitalize">{product.category}</p>
             </div>
-          )}
-
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">Category</p>
-            <p className="font-medium capitalize">{product.category}</p>
+            <ReportDialog
+              reportedType="product"
+              reportedId={product._id || product.id}
+              reportedTitle={product.title}
+            />
           </div>
 
           <div className="flex flex-col gap-3">
@@ -720,14 +951,6 @@ export default function ProductDetail() {
                   ? "Added to Cart!" 
                   : "Add to Cart"}
             </Button>
-          </div>
-          
-          <div className="flex justify-end">
-            <ReportDialog
-              reportedType="product"
-              reportedId={product._id || product.id}
-              reportedTitle={product.title}
-            />
           </div>
         </div>
       </div>

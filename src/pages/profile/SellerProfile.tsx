@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, BarChart3, PieChart, Wallet, Download, CheckCircle2 } from 'lucide-react'
+import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, BarChart3, PieChart, Wallet, Download, CheckCircle2, User } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import {
@@ -30,8 +34,15 @@ import * as productService from '../../services/productService'
 import * as orderService from '../../services/orderService'
 import * as analyticsService from '../../services/analyticsService'
 import * as payoutService from '../../services/payoutService'
+import * as userService from '../../services/userService'
 import type { Product } from '../../services/productService'
 import type { Order } from '../../services/orderService'
+
+interface ProfileFormData {
+  fullName: string
+  businessName: string
+  businessDescription: string
+}
 import AddProductForm from '../../components/AddProductForm'
 import ProductsList from '../../components/ProductsList'
 import { getFirstImageUrl } from '../../utils/imageUtils'
@@ -52,9 +63,20 @@ import {
 } from 'recharts'
 
 export default function SellerProfile() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Valid tab values
+  const validTabs = ['sold-products', 'products', 'orders', 'analytics', 'payments', 'profile']
+  
+  // Get active tab from URL or use default
+  const urlTab = searchParams.get('tab')
+  const activeTab = (urlTab && validTabs.includes(urlTab)) 
+    ? urlTab 
+    : 'sold-products'
+  
   const [sellerProfile, setSellerProfile] = useState<sellerService.SellerProfile | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
@@ -76,6 +98,22 @@ export default function SellerProfile() {
   const [productsSortBy, setProductsSortBy] = useState<string>('createdAt')
   const [productsSortOrder, setProductsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [statisticsDialogOpen, setStatisticsDialogOpen] = useState(false)
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<ProfileFormData>({
+    defaultValues: {
+      fullName: user?.fullName || '',
+      businessName: '',
+      businessDescription: '',
+    },
+  })
 
   const fetchProducts = async (page = 1, sortBy?: string, sortOrder?: 'asc' | 'desc') => {
     const response = await productService.getSellerProducts({ 
@@ -115,6 +153,65 @@ export default function SellerProfile() {
 
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (user && sellerProfile) {
+      reset({
+        fullName: user.fullName || '',
+        businessName: sellerProfile.businessName || '',
+        businessDescription: sellerProfile.businessDescription || '',
+      })
+    }
+  }, [user, sellerProfile, reset])
+
+  const onProfileSubmit = async (data: ProfileFormData) => {
+    setIsUpdatingProfile(true)
+    setProfileError(null)
+    
+    try {
+      // Update user profile
+      const userResponse = await userService.updateUserProfile({ fullName: data.fullName })
+      updateUser(userResponse.user)
+      
+      // Update seller profile
+      const sellerResponse = await sellerService.updateSellerProfile({
+        businessName: data.businessName,
+        businessDescription: data.businessDescription,
+      })
+      
+      // Update local state
+      setSellerProfile(sellerResponse.sellerProfile)
+      
+      toast({
+        title: 'Success',
+        description: 'Profile updated successfully',
+        variant: 'default',
+      })
+      
+      setIsEditingProfile(false)
+    } catch (error: any) {
+      setProfileError(error.response?.data?.error || error.message || 'Failed to update profile')
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || error.message || 'Failed to update profile',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsUpdatingProfile(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditingProfile(false)
+    setProfileError(null)
+    if (user && sellerProfile) {
+      reset({
+        fullName: user.fullName || '',
+        businessName: sellerProfile.businessName || '',
+        businessDescription: sellerProfile.businessDescription || '',
+      })
+    }
+  }
 
   const handleProductAdded = () => {
     fetchProducts(productsPagination.page)
@@ -345,7 +442,9 @@ export default function SellerProfile() {
         )}
       </div>
 
-      <Tabs defaultValue="sold-products" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setSearchParams({ tab: value })
+      }} className="space-y-6">
         <TabsList>
           <TabsTrigger value="sold-products" className="gap-2">
             <CheckCircle2 className="h-4 w-4" />
@@ -366,6 +465,10 @@ export default function SellerProfile() {
           <TabsTrigger value="payments" className="gap-2">
             <DollarSign className="h-4 w-4" />
             Payments
+          </TabsTrigger>
+          <TabsTrigger value="profile" className="gap-2">
+            <User className="h-4 w-4" />
+            Profile
           </TabsTrigger>
         </TabsList>
 
@@ -1062,6 +1165,127 @@ export default function SellerProfile() {
                 </div>
               ) : (
                 <p className="text-center text-muted-foreground py-8">No payout history</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="profile" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Information</CardTitle>
+              <CardDescription>Update your personal and business details</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isEditingProfile ? (
+                <form onSubmit={handleSubmit(onProfileSubmit)} className="space-y-4">
+                  {profileError && (
+                    <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md text-sm">
+                      {profileError}
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full Name</Label>
+                    <Input
+                      id="fullName"
+                      {...register('fullName', {
+                        required: 'Full name is required',
+                        minLength: {
+                          value: 2,
+                          message: 'Full name must be at least 2 characters',
+                        },
+                      })}
+                      placeholder="Enter your full name"
+                    />
+                    {errors.fullName && (
+                      <p className="text-sm text-destructive">{errors.fullName.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={user?.email || ''}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="businessName">Business Name</Label>
+                    <Input
+                      id="businessName"
+                      {...register('businessName', {
+                        required: 'Business name is required',
+                        minLength: {
+                          value: 2,
+                          message: 'Business name must be at least 2 characters',
+                        },
+                      })}
+                      placeholder="Enter your business name"
+                    />
+                    {errors.businessName && (
+                      <p className="text-sm text-destructive">{errors.businessName.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="businessDescription">Business Description</Label>
+                    <Textarea
+                      id="businessDescription"
+                      {...register('businessDescription')}
+                      placeholder="Enter your business description (optional)"
+                      rows={4}
+                    />
+                    {errors.businessDescription && (
+                      <p className="text-sm text-destructive">{errors.businessDescription.message}</p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={isUpdatingProfile}>
+                      {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelEdit}
+                      disabled={isUpdatingProfile}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-sm font-medium mb-1">Name</p>
+                    <p className="text-muted-foreground">{user?.fullName || 'Not set'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-1">Email</p>
+                    <p className="text-muted-foreground">{user?.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-1">Business Name</p>
+                    <p className="text-muted-foreground">{sellerProfile?.businessName || 'Not set'}</p>
+                  </div>
+                  {sellerProfile?.businessDescription && (
+                    <div>
+                      <p className="text-sm font-medium mb-1">Business Description</p>
+                      <p className="text-muted-foreground whitespace-pre-wrap">{sellerProfile.businessDescription}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium mb-1">Account Status</p>
+                    <p className="text-muted-foreground capitalize">{sellerProfile?.status || 'Unknown'}</p>
+                  </div>
+                  <Button onClick={() => setIsEditingProfile(true)}>Edit Profile</Button>
+                </>
               )}
             </CardContent>
           </Card>

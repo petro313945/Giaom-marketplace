@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { getFirstImageUrl } from '../utils/imageUtils'
+import { getVariantImageUrl } from '../utils/imageUtils'
 import type { Product, ProductVariant } from '../services/productService'
 
 interface VariantSelectionModalProps {
@@ -185,6 +185,9 @@ export default function VariantSelectionModal({
   const deliveryCost = 10.26 // Mock delivery cost
   const currency = '$' // USD
 
+  // Get the image to display - prioritize variant image if available
+  const displayImage = getVariantImageUrl(selectedVariant, product)
+
   // Check if variant selection is complete
   const isVariantComplete = () => {
     if (!product.variants || product.variants.length === 0) return true
@@ -229,9 +232,9 @@ export default function VariantSelectionModal({
           {/* Product Image and Name */}
           <div className="flex gap-3">
             <img
-              src={getFirstImageUrl(product)}
+              src={displayImage}
               alt={product.title}
-              className="w-20 h-20 object-contain rounded flex-shrink-0 bg-muted"
+              className="w-20 h-20 object-contain rounded flex-shrink-0 bg-muted transition-opacity duration-200"
             />
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-sm mb-1 line-clamp-2">{product.title}</h3>

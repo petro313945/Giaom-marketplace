@@ -5,6 +5,12 @@ export interface ProductVariant {
   color?: string;
   price?: number;
   stock: number;
+  imageUrls?: string[];
+}
+
+export interface BulkDiscountTier {
+  minQuantity: number;
+  discountPercent: number;
 }
 
 export interface Product {
@@ -19,6 +25,7 @@ export interface Product {
   imageUrls?: string[]; // Array of image URLs
   stockQuantity: number;
   variants?: ProductVariant[];
+  bulkDiscountTiers?: BulkDiscountTier[];
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +47,7 @@ export const getProducts = async (params?: {
   search?: string;
   minPrice?: number;
   maxPrice?: number;
+  sellerId?: string;
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -71,6 +79,7 @@ export interface CreateProductData {
   imageUrls?: string[]; // Array of image URLs
   stockQuantity?: number;
   variants?: ProductVariant[];
+  bulkDiscountTiers?: BulkDiscountTier[];
 }
 
 export const createProduct = async (data: CreateProductData): Promise<{ message: string; product: Product }> => {
@@ -124,6 +133,7 @@ export interface UpdateProductData {
   imageUrls?: string[];
   stockQuantity?: number;
   variants?: ProductVariant[];
+  bulkDiscountTiers?: BulkDiscountTier[];
 }
 
 export const updateProduct = async (id: string, data: UpdateProductData): Promise<{ message: string; product: Product }> => {

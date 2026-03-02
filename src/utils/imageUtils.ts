@@ -40,3 +40,17 @@ export const getFirstImageUrl = (product: { imageUrl?: string; imageUrls?: strin
   }
   return getImageUrl(product.imageUrl);
 };
+
+/**
+ * Get the first image URL from a variant, or fallback to product images
+ * Useful for displaying variant-specific images
+ */
+export const getVariantImageUrl = (
+  variant: { imageUrls?: string[] } | null | undefined,
+  product: { imageUrl?: string; imageUrls?: string[] } | null | undefined
+): string => {
+  if (variant && variant.imageUrls && variant.imageUrls.length > 0) {
+    return getImageUrl(variant.imageUrls[0]);
+  }
+  return getFirstImageUrl(product);
+};

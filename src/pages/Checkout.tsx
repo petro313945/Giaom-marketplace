@@ -21,6 +21,7 @@ import * as orderService from '../services/orderService'
 import * as addressService from '../services/addressService'
 import * as paymentService from '../services/paymentService'
 import { getImageUrl } from '../utils/imageUtils'
+import { calculateBulkDiscountPrice, calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
 import type { ShippingAddress } from '../services/orderService'
 import type { Address } from '../services/addressService'
 
@@ -241,12 +242,25 @@ function CheckoutForm() {
     if (!cart.items.length) return 0
     return cart.items.reduce((sum, item) => {
       const product = item.productId as any
+      const basePrice = typeof product === 'object' ? product.price : 0
+      const bulkDiscountTiers = typeof product === 'object' ? product.bulkDiscountTiers : undefined
+      const itemTotal = calculateBulkDiscountTotal(basePrice, item.quantity, bulkDiscountTiers)
+      return sum + itemTotal
+    }, 0)
+  }
+
+  const calculateOriginalTotal = () => {
+    if (!cart.items.length) return 0
+    return cart.items.reduce((sum, item) => {
+      const product = item.productId as any
       const price = typeof product === 'object' ? product.price : 0
       return sum + (price * item.quantity)
     }, 0)
   }
 
   const subtotal = calculateTotal()
+  const originalSubtotal = calculateOriginalTotal()
+  const discountAmount = originalSubtotal - subtotal
   const tax = subtotal * 0.08
   const total = subtotal + tax
 
@@ -560,8 +574,13 @@ function CheckoutForm() {
                 {cart.items.map((item) => {
                   const product = item.productId as any
                   const productName = typeof product === 'object' ? product.title : 'Product'
-                  const productPrice = typeof product === 'object' ? product.price : 0
+                  const basePrice = typeof product === 'object' ? product.price : 0
+                  const bulkDiscountTiers = typeof product === 'object' ? product.bulkDiscountTiers : undefined
                   const productImage = typeof product === 'object' ? getImageUrl(product.imageUrl) : '/placeholder.svg'
+                  const itemTotal = calculateBulkDiscountTotal(basePrice, item.quantity, bulkDiscountTiers)
+                  const originalTotal = basePrice * item.quantity
+                  const itemDiscount = originalTotal - itemTotal
+                  const discountTier = getApplicableDiscountTier(item.quantity, bulkDiscountTiers)
                   
                   return (
                     <div key={item.id} className="flex gap-3">
@@ -573,13 +592,38 @@ function CheckoutForm() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{productName}</p>
                         <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
-                        <p className="font-medium">${(productPrice * item.quantity).toFixed(2)}</p>
+                        {discountTier ? (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">${itemTotal.toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground line-through">${originalTotal.toFixed(2)}</p>
+                              <Badge variant="destructive" className="text-xs">
+                                {discountTier.discountPercent}% OFF
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-green-600">Save ${itemDiscount.toFixed(2)}</p>
+                          </div>
+                        ) : (
+                          <p className="font-medium">${itemTotal.toFixed(2)}</p>
+                        )}
                       </div>
                     </div>
                   )
                 })}
               </div>
               <div className="border-t pt-4 space-y-2">
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal</span>
+                    <span className="line-through text-muted-foreground">${originalSubtotal.toFixed(2)}</span>
+                  </div>
+                )}
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>Discount</span>
+                    <span>-${discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span>Subtotal</span>
                   <span>${subtotal.toFixed(2)}</span>

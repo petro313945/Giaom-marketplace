@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, User, Menu, Heart, LogOut } from 'lucide-react'
+import { Search, User, Menu, Heart, LogOut, Package, MapPin, ShoppingBag, TrendingUp, DollarSign, CheckCircle2, Store, ShoppingCart, Star, AlertCircle, Wallet, Tags, Home } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { useToast } from './ui/use-toast'
 import { useAuth } from '../context/AuthContext'
 import CartDrawer from './CartDrawer'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu'
 import * as categoryService from '../services/categoryService'
 import * as wishlistService from '../services/wishlistService'
 
@@ -131,13 +137,159 @@ export default function Header() {
                       )}
                     </Link>
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <User className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile?tab=bought-product" className="flex items-center gap-2">
+                          <ShoppingBag className="h-4 w-4" />
+                          Bought Product
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile?tab=orders" className="flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          Orders
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile?tab=wishlist" className="flex items-center gap-2">
+                          <Heart className="h-4 w-4" />
+                          Wishlist
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile?tab=addresses" className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4" />
+                          Addresses
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile?tab=profile" className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          Profile
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
               )}
-              <Button variant="ghost" size="icon" asChild>
-                <Link to="/profile">
-                  <User className="h-5 w-5" />
-                </Link>
-              </Button>
+              {user?.role === 'seller' && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <User className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=sold-products" className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Sold Products
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=products" className="flex items-center gap-2">
+                        <ShoppingBag className="h-4 w-4" />
+                        Products
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=orders" className="flex items-center gap-2">
+                        <Package className="h-4 w-4" />
+                        Orders
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=analytics" className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Analytics
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=payments" className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Payments
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile" className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        Profile
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {user?.role === 'admin' && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <User className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=sellers" className="flex items-center gap-2">
+                        <Store className="h-4 w-4" />
+                        Sellers
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=buyers" className="flex items-center gap-2">
+                        <ShoppingCart className="h-4 w-4" />
+                        Buyers
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=products" className="flex items-center gap-2">
+                        <ShoppingBag className="h-4 w-4" />
+                        Products
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=orders" className="flex items-center gap-2">
+                        <Package className="h-4 w-4" />
+                        Orders
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=payouts" className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4" />
+                        Payouts
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=categories" className="flex items-center gap-2">
+                        <Tags className="h-4 w-4" />
+                        Categories
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=home" className="flex items-center gap-2">
+                        <Home className="h-4 w-4" />
+                        Home
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=reviews" className="flex items-center gap-2">
+                        <Star className="h-4 w-4" />
+                        Reviews
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=reports" className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Reports
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <Button variant="ghost" size="icon" onClick={handleLogout}>
                 <LogOut className="h-5 w-5" />
               </Button>
