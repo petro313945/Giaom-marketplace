@@ -373,66 +373,45 @@ export default function ProductDetail() {
     return []
   }
 
-  // Get images to display (variant images if available, with fallback to product images)
+  // Get images to display (color-based images if available, with fallback to product images)
+  // Images are per color, not per size - following Amazon/e-commerce best practices
   const getDisplayImages = () => {
     if (!product) return []
     
-    const matchingVariant = getMatchingVariant()
-    const variantImages: string[] = []
-    const productImages: string[] = []
-    
-    // Get variant images if available
-    if (matchingVariant && matchingVariant.imageUrls && matchingVariant.imageUrls.length > 0) {
-      variantImages.push(...matchingVariant.imageUrls)
+    // Get color-based images if color is selected
+    if (selectedVariant?.color && product.colorImages) {
+      const colorImages = product.colorImages[selectedVariant.color]
+      if (colorImages && Array.isArray(colorImages) && colorImages.length > 0) {
+        return colorImages
+      }
     }
     
-    // Get product images
+    // Fallback to product images
     if (product.imageUrls && product.imageUrls.length > 0) {
-      productImages.push(...product.imageUrls)
+      return product.imageUrls
     } else if (product.imageUrl) {
-      productImages.push(product.imageUrl)
+      return [product.imageUrl]
     }
     
-    // If variant has images, combine them with product images (variant first, then product)
-    // Remove duplicates to avoid showing the same image twice
-    if (variantImages.length > 0) {
-      const combined = [...variantImages]
-      productImages.forEach(img => {
-        if (!combined.includes(img)) {
-          combined.push(img)
-        }
-      })
-      return combined
-    }
-    
-    // Otherwise, return product images
-    return productImages
+    return []
   }
 
-  // Reset image index when variant changes and ensure it's within bounds
+  // Reset image index when color changes (not size) and ensure it's within bounds
+  // Images are per color, so only color changes should trigger image updates
   useEffect(() => {
     if (!product) return
     
     let displayImages: string[] = []
     
-    // Find matching variant if variant is selected
-    if (selectedVariant && product.variants && product.variants.length > 0) {
-      const matchingVariants = product.variants.filter(v => {
-        const sizeMatch = !selectedVariant.size || v.size === selectedVariant.size
-        const colorMatch = !selectedVariant.color || v.color === selectedVariant.color
-        return sizeMatch && colorMatch
-      })
-      
-      // Prioritize variant with images
-      const variantWithImages = matchingVariants.find(v => v.imageUrls && v.imageUrls.length > 0)
-      const matchingVariant = variantWithImages || matchingVariants[0]
-      
-      if (matchingVariant && matchingVariant.imageUrls && matchingVariant.imageUrls.length > 0) {
-        displayImages = matchingVariant.imageUrls
+    // Get color-based images if color is selected
+    if (selectedVariant?.color && product.colorImages) {
+      const colorImages = product.colorImages[selectedVariant.color]
+      if (colorImages && Array.isArray(colorImages) && colorImages.length > 0) {
+        displayImages = colorImages
       }
     }
     
-    // Fallback to product images if no variant images
+    // Fallback to product images
     if (displayImages.length === 0) {
       if (product.imageUrls && product.imageUrls.length > 0) {
         displayImages = product.imageUrls
@@ -449,7 +428,7 @@ export default function ProductDetail() {
     } else {
       setSelectedImageIndex(0)
     }
-  }, [selectedVariant, product])
+  }, [selectedVariant?.color, product]) // Only depend on color, not size
 
   // Format purchase count (e.g., "1K+", "500+", "50+")
   const formatPurchaseCount = (count: number): string => {

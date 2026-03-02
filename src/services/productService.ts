@@ -23,6 +23,7 @@ export interface Product {
   category: string;
   imageUrl?: string;
   imageUrls?: string[]; // Array of image URLs
+  colorImages?: { [color: string]: string[] }; // Images per color (e.g., { "Red": ["url1", "url2"], "Blue": ["url3", "url4"] })
   stockQuantity: number;
   variants?: ProductVariant[];
   bulkDiscountTiers?: BulkDiscountTier[];
@@ -77,6 +78,7 @@ export interface CreateProductData {
   category: string;
   imageUrl?: string;
   imageUrls?: string[]; // Array of image URLs
+  colorImages?: { [color: string]: string[] }; // Images per color
   stockQuantity?: number;
   variants?: ProductVariant[];
   bulkDiscountTiers?: BulkDiscountTier[];
@@ -131,6 +133,7 @@ export interface UpdateProductData {
   category?: string;
   imageUrl?: string;
   imageUrls?: string[];
+  colorImages?: { [color: string]: string[] }; // Images per color
   stockQuantity?: number;
   variants?: ProductVariant[];
   bulkDiscountTiers?: BulkDiscountTier[];

@@ -61,13 +61,13 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
   // Bulk discount tiers state
   const [discountTiers, setDiscountTiers] = useState<BulkDiscountTier[]>([])
   
-  // Variant images state - maps variant index to array of ImageItem
-  const [variantImages, setVariantImages] = useState<Map<number, ImageItem[]>>(new Map())
-  // Variant URL input refs - maps variant index to URL input element
-  const variantUrlInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  // Color images state - maps color name to array of ImageItem (new: images per color, not per variant)
+  const [colorImages, setColorImages] = useState<Map<string, ImageItem[]>>(new Map())
+  // Color URL input refs - maps color name to URL input element
+  const colorUrlInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const variantFileInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  const colorFileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const { register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<ProductFormData>()
   const selectedCategory = watch('category')
   
@@ -125,11 +125,10 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     setImages((prev) => prev.filter((img) => img.id !== id))
   }
 
-  // Handle variant image file selection
-  const handleVariantFileSelect = (variantIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle color image file selection
+  const handleColorFileSelect = (color: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files) {
-      const newImages: ImageItem[] = []
       Array.from(files).forEach((file) => {
         // Validate file type
         if (!file.type.startsWith('image/')) {
@@ -149,25 +148,25 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             file,
             preview: reader.result as string
           }
-          setVariantImages((prev) => {
+          setColorImages((prev) => {
             const newMap = new Map(prev)
-            const existing = newMap.get(variantIndex) || []
-            newMap.set(variantIndex, [...existing, imageItem])
+            const existing = newMap.get(color) || []
+            newMap.set(color, [...existing, imageItem])
             return newMap
           })
         }
         reader.readAsDataURL(file)
       })
       setError(null)
-      const input = variantFileInputRefs.current.get(variantIndex)
+      const input = colorFileInputRefs.current.get(color)
       if (input) {
         input.value = ''
       }
     }
   }
 
-  // Handle variant image URL input
-  const handleVariantImageUrlAdd = (variantIndex: number, url: string) => {
+  // Handle color image URL input
+  const handleColorImageUrlAdd = (color: string, url: string) => {
     if (!url.trim()) return
     
     let validUrl = url.trim()
@@ -184,10 +183,10 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
         type: 'url',
         url: validUrl
       }
-      setVariantImages((prev) => {
+      setColorImages((prev) => {
         const newMap = new Map(prev)
-        const existing = newMap.get(variantIndex) || []
-        newMap.set(variantIndex, [...existing, imageItem])
+        const existing = newMap.get(color) || []
+        newMap.set(color, [...existing, imageItem])
         return newMap
       })
       setError(null)
@@ -196,12 +195,12 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     }
   }
 
-  // Remove variant image
-  const handleRemoveVariantImage = (variantIndex: number, imageId: string) => {
-    setVariantImages((prev) => {
+  // Remove color image
+  const handleRemoveColorImage = (color: string, imageId: string) => {
+    setColorImages((prev) => {
       const newMap = new Map(prev)
-      const existing = newMap.get(variantIndex) || []
-      newMap.set(variantIndex, existing.filter((img) => img.id !== imageId))
+      const existing = newMap.get(color) || []
+      newMap.set(color, existing.filter((img) => img.id !== imageId))
       return newMap
     })
   }
@@ -242,10 +241,46 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     )
   }
 
+  // Add a new color to color images
+  const addColorForImages = (colorName: string) => {
+    if (!colorName.trim()) return
+    const color = colorName.trim()
+    if (!colorImages.has(color)) {
+      setColorImages(prev => {
+        const newMap = new Map(prev)
+        newMap.set(color, [])
+        return newMap
+      })
+      // Also add to selected colors if not already there
+      if (!selectedColors.includes(color)) {
+        setSelectedColors(prev => [...prev, color])
+      }
+    }
+  }
+
+  // Remove a color from color images
+  const removeColorFromImages = (color: string) => {
+    setColorImages(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(color)
+      return newMap
+    })
+  }
+
+  // Get all colors that have images or are in selected colors
+  const getAllAvailableColors = () => {
+    const colorImageColors = Array.from(colorImages.keys())
+    const allColors = Array.from(new Set([...selectedColors, ...colorImageColors]))
+    return allColors.sort()
+  }
+
   // Generate variants from size/color combinations
   const generateVariantsFromBulk = () => {
-    if (selectedSizes.length === 0 && selectedColors.length === 0) {
-      setError('Please select at least one size or color')
+    // Always use all colors that have images
+    const colorsToUse = Array.from(colorImages.keys())
+    
+    if (selectedSizes.length === 0 && colorsToUse.length === 0) {
+      setError('Please add at least one color above, or select sizes to generate size-only variants')
       return
     }
 
@@ -255,10 +290,10 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
 
     const newVariants: ProductVariant[] = []
 
-    if (selectedSizes.length > 0 && selectedColors.length > 0) {
-      // Generate all combinations
+    if (selectedSizes.length > 0 && colorsToUse.length > 0) {
+      // Generate all size x color combinations
       selectedSizes.forEach(size => {
-        selectedColors.forEach(color => {
+        colorsToUse.forEach(color => {
           newVariants.push({
             size,
             color,
@@ -268,7 +303,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
         })
       })
     } else if (selectedSizes.length > 0) {
-      // Only sizes
+      // Only sizes (no colors)
       selectedSizes.forEach(size => {
         newVariants.push({
           size,
@@ -276,9 +311,9 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
           price: basePrice !== undefined ? basePrice + priceAdj : undefined
         })
       })
-    } else if (selectedColors.length > 0) {
-      // Only colors
-      selectedColors.forEach(color => {
+    } else if (colorsToUse.length > 0) {
+      // Only colors (no sizes)
+      colorsToUse.forEach(color => {
         newVariants.push({
           color,
           stock: stockValue,
@@ -290,7 +325,6 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     setVariants(prev => [...prev, ...newVariants])
     // Reset bulk inputs
     setSelectedSizes([])
-    setSelectedColors([])
     setBulkStock('')
     setBulkPrice('')
     setPriceAdjustment('')
@@ -386,12 +420,12 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
         }
       }
 
-      // Upload variant images
-      const variantImageUrls: Map<number, string[]> = new Map()
-      if (variantImages.size > 0) {
+      // Upload color images (images per color, not per variant)
+      const colorImageUrls: { [color: string]: string[] } = {}
+      if (colorImages.size > 0) {
         setIsUploading(true)
         try {
-          for (const [variantIndex, images] of variantImages.entries()) {
+          for (const [color, images] of colorImages.entries()) {
             const urls: string[] = []
             
             // Upload file images
@@ -410,11 +444,11 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             })
             
             if (urls.length > 0) {
-              variantImageUrls.set(variantIndex, urls)
+              colorImageUrls[color] = urls
             }
           }
         } catch (uploadErr: any) {
-          setError(uploadErr.response?.data?.error || uploadErr.message || 'Failed to upload variant images')
+          setError(uploadErr.response?.data?.error || uploadErr.message || 'Failed to upload color images')
           setIsLoading(false)
           setIsUploading(false)
           return
@@ -426,12 +460,11 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
       // Format variants for submission (remove undefined values and empty strings)
       const formattedVariants = variants.length > 0 
         ? variants
-            .map((v, index) => ({
+            .map((v) => ({
               size: v.size && v.size.trim() ? v.size.trim() : undefined,
               color: v.color && v.color.trim() ? v.color.trim() : undefined,
               price: v.price !== undefined && v.price > 0 ? v.price : undefined,
-              stock: v.stock,
-              imageUrls: variantImageUrls.get(index) || undefined
+              stock: v.stock
             }))
             .filter(v => v.size || v.color) // Remove variants with no size or color
         : []
@@ -442,6 +475,7 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
         price: parseFloat(data.price), // Base price is always required
         category: data.category,
         imageUrls: imageUrls,
+        colorImages: Object.keys(colorImageUrls).length > 0 ? colorImageUrls : undefined,
         stockQuantity: productType === 'simple' ? parseInt(data.stockQuantity) || 0 : 0,
         variants: productType === 'variants' ? formattedVariants : [],
         bulkDiscountTiers: discountTiers.length > 0 ? discountTiers : undefined,
@@ -451,14 +485,11 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
       setImages([])
       setUrlInputs([''])
       setVariants([])
-      setVariantImages(new Map())
+      setColorImages(new Map())
       setDiscountTiers([])
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
-      variantFileInputRefs.current.forEach((input) => {
-        if (input) input.value = ''
-      })
       setIsOpen(false)
       onProductAdded?.()
     } catch (err: any) {
@@ -621,6 +652,186 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
           {/* Product Variants Section */}
           {productType === 'variants' && (
             <div className="space-y-4">
+              {/* Colors & Images Section - Unified */}
+              <div className="border rounded-lg p-4 space-y-4 bg-primary/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Upload className="h-4 w-4 text-primary" />
+                    <Label className="font-semibold">Colors & Images</Label>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Add colors and their images. All colors you add here will be used for variants.
+                </p>
+                
+                {/* Add New Color Input */}
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Enter color name (e.g., Red, Blue, Black)"
+                    className="text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const colorName = e.currentTarget.value.trim()
+                        if (colorName) {
+                          addColorForImages(colorName)
+                          e.currentTarget.value = ''
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      const input = e.currentTarget.previousElementSibling as HTMLInputElement
+                      if (input && input.value.trim()) {
+                        addColorForImages(input.value.trim())
+                        input.value = ''
+                      }
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Color
+                  </Button>
+                </div>
+
+                {/* Quick Color Buttons */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Quick Add Colors</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {commonColors.map(color => (
+                      <Button
+                        key={color}
+                        type="button"
+                        variant={colorImages.has(color) ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          if (!colorImages.has(color)) {
+                            addColorForImages(color)
+                          }
+                        }}
+                        className="text-xs"
+                      >
+                        {color}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Images List */}
+                {Array.from(colorImages.keys()).length > 0 && (
+                  <div className="space-y-3 border-t pt-3">
+                    {Array.from(colorImages.keys()).map(color => {
+                      const colorImgs = colorImages.get(color) || []
+                      return (
+                        <div key={color} className="border rounded-lg p-3 space-y-2 bg-background">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">{color}</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeColorFromImages(color)}
+                              className="text-destructive text-xs h-6"
+                            >
+                              <X className="h-3 w-3 mr-1" />
+                              Remove
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {colorImgs.map((img) => (
+                              <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden">
+                                <img
+                                  src={img.preview || img.url}
+                                  alt={`${color} preview`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="absolute top-0 right-0 h-6 w-6 p-0 bg-destructive/80 hover:bg-destructive text-white"
+                                  onClick={() => handleRemoveColorImage(color, img.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              ref={(el) => {
+                                if (el) {
+                                  colorFileInputRefs.current.set(color, el)
+                                } else {
+                                  colorFileInputRefs.current.delete(color)
+                                }
+                              }}
+                              onChange={(e) => handleColorFileSelect(color, e)}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => colorFileInputRefs.current.get(color)?.click()}
+                              className="text-xs"
+                            >
+                              <Upload className="h-3 w-3 mr-1" />
+                              Upload Images
+                            </Button>
+                            <Input
+                              type="url"
+                              placeholder="Or paste image URL"
+                              className="text-xs flex-1"
+                              ref={(el) => {
+                                if (el) {
+                                  colorUrlInputRefs.current.set(color, el)
+                                } else {
+                                  colorUrlInputRefs.current.delete(color)
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  const url = e.currentTarget.value.trim()
+                                  if (url) {
+                                    handleColorImageUrlAdd(color, url)
+                                    e.currentTarget.value = ''
+                                  }
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const input = colorUrlInputRefs.current.get(color)
+                                if (input && input.value.trim()) {
+                                  handleColorImageUrlAdd(color, input.value.trim())
+                                  input.value = ''
+                                }
+                              }}
+                              className="text-xs"
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between">
                 <Label>Product Variants</Label>
                 <Button
@@ -635,14 +846,14 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                 </Button>
               </div>
 
-              {/* Bulk Variant Generation */}
+              {/* Simplified Variant Generation */}
               <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  <Label className="font-semibold">Bulk Generate Variants</Label>
+                  <Label className="font-semibold">Generate Variants</Label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Select sizes and/or colors to automatically generate all combinations
+                  Select sizes to generate variants. All colors you added above will be used automatically.
                 </p>
 
                 {/* Size Selection */}
@@ -675,35 +886,22 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                   />
                 </div>
 
-                {/* Color Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm">Colors (optional)</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {commonColors.map(color => (
-                      <Button
-                        key={color}
-                        type="button"
-                        variant={selectedColors.includes(color) ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => toggleColor(color)}
-                      >
-                        {color}
-                      </Button>
-                    ))}
+                {/* Show which colors will be used */}
+                {Array.from(colorImages.keys()).length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Colors to use (from above)</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(colorImages.keys()).map(color => (
+                        <div
+                          key={color}
+                          className="px-3 py-1.5 bg-primary/10 text-primary rounded-md text-sm font-medium"
+                        >
+                          {color}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <Input
-                    type="text"
-                    placeholder="Or enter custom colors (comma-separated)"
-                    onBlur={(e) => {
-                      const customColors = e.target.value.split(',').map(c => c.trim()).filter(c => c)
-                      if (customColors.length > 0) {
-                        setSelectedColors(prev => [...prev, ...customColors.filter(c => !prev.includes(c))])
-                        e.target.value = ''
-                      }
-                    }}
-                    className="text-sm"
-                  />
-                </div>
+                )}
 
                 {/* Bulk Stock and Price */}
                 <div className="grid grid-cols-3 gap-3">
@@ -745,17 +943,21 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                   type="button"
                   variant="secondary"
                   onClick={generateVariantsFromBulk}
-                  disabled={selectedSizes.length === 0 && selectedColors.length === 0}
+                  disabled={selectedSizes.length === 0 && colorImages.size === 0}
                   className="w-full gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Generate {selectedSizes.length > 0 && selectedColors.length > 0 
-                    ? `${selectedSizes.length * selectedColors.length} variants`
-                    : selectedSizes.length > 0 
-                      ? `${selectedSizes.length} size variants`
-                      : selectedColors.length > 0
-                        ? `${selectedColors.length} color variants`
-                        : 'variants'}
+                  Generate {(() => {
+                    const colorsToUse = Array.from(colorImages.keys())
+                    if (selectedSizes.length > 0 && colorsToUse.length > 0) {
+                      return `${selectedSizes.length * colorsToUse.length} variants`
+                    } else if (selectedSizes.length > 0) {
+                      return `${selectedSizes.length} size variants`
+                    } else if (colorsToUse.length > 0) {
+                      return `${colorsToUse.length} color variants`
+                    }
+                    return 'variants'
+                  })()}
                 </Button>
               </div>
 
@@ -778,7 +980,6 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                   </div>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
                     {variants.map((variant, index) => {
-                      const variantImgs = variantImages.get(index) || []
                       return (
                         <div key={index} className="border rounded-lg p-3 bg-background space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
@@ -797,16 +998,45 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Color</Label>
-                              <Input
-                                placeholder="e.g., Red, Blue"
-                                value={variant.color || ''}
-                                onChange={(e) => {
-                                  const newVariants = [...variants]
-                                  newVariants[index] = { ...variant, color: e.target.value || undefined }
-                                  setVariants(newVariants)
-                                }}
-                                className="text-sm"
-                              />
+                              <div className="flex gap-1">
+                                {getAllAvailableColors().length > 0 ? (
+                                  <Select
+                                    value={variant.color || undefined}
+                                    onValueChange={(value) => {
+                                      const newVariants = [...variants]
+                                      newVariants[index] = { ...variant, color: value || undefined }
+                                      setVariants(newVariants)
+                                    }}
+                                  >
+                                    <SelectTrigger className="text-xs h-9 flex-1">
+                                      <SelectValue placeholder="Select color" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {getAllAvailableColors().map(color => (
+                                        <SelectItem key={color} value={color}>
+                                          {color} {colorImages.has(color) && '📷'}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : null}
+                                <Input
+                                  placeholder={getAllAvailableColors().length > 0 ? "Or type custom" : "Enter color"}
+                                  value={variant.color || ''}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index] = { ...variant, color: e.target.value || undefined }
+                                    setVariants(newVariants)
+                                  }}
+                                  className="text-xs flex-1"
+                                  onBlur={(e) => {
+                                    const color = e.target.value.trim()
+                                    if (color && !colorImages.has(color)) {
+                                      addColorForImages(color)
+                                    }
+                                  }}
+                                />
+                              </div>
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Price ($)</Label>
@@ -848,104 +1078,11 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
                               size="sm"
                               onClick={() => {
                                 setVariants(variants.filter((_, i) => i !== index))
-                                setVariantImages((prev) => {
-                                  const newMap = new Map(prev)
-                                  newMap.delete(index)
-                                  return newMap
-                                })
                               }}
                               className="text-destructive"
                             >
                               <X className="h-4 w-4" />
                             </Button>
-                          </div>
-                          
-                          {/* Variant Images Section */}
-                          <div className="space-y-2 border-t pt-2">
-                            <Label className="text-xs font-medium">Variant Images (Optional)</Label>
-                            <div className="flex flex-wrap gap-2">
-                              {variantImgs.map((img) => (
-                                <div key={img.id} className="relative w-20 h-20 border rounded overflow-hidden">
-                                  <img
-                                    src={img.preview || img.url}
-                                    alt="Variant preview"
-                                    className="w-full h-full object-cover"
-                                  />
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="absolute top-0 right-0 h-6 w-6 p-0 bg-destructive/80 hover:bg-destructive text-white"
-                                    onClick={() => handleRemoveVariantImage(index, img.id)}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex gap-2">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="hidden"
-                                ref={(el) => {
-                                  if (el) {
-                                    variantFileInputRefs.current.set(index, el)
-                                  } else {
-                                    variantFileInputRefs.current.delete(index)
-                                  }
-                                }}
-                                onChange={(e) => handleVariantFileSelect(index, e)}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => variantFileInputRefs.current.get(index)?.click()}
-                                className="text-xs"
-                              >
-                                <Upload className="h-3 w-3 mr-1" />
-                                Upload
-                              </Button>
-                              <Input
-                                type="url"
-                                placeholder="Or paste image URL"
-                                className="text-xs flex-1"
-                                ref={(el) => {
-                                  if (el) {
-                                    variantUrlInputRefs.current.set(index, el)
-                                  } else {
-                                    variantUrlInputRefs.current.delete(index)
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault()
-                                    const url = e.currentTarget.value.trim()
-                                    if (url) {
-                                      handleVariantImageUrlAdd(index, url)
-                                      e.currentTarget.value = ''
-                                    }
-                                  }
-                                }}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  const input = variantUrlInputRefs.current.get(index)
-                                  if (input && input.value.trim()) {
-                                    handleVariantImageUrlAdd(index, input.value.trim())
-                                    input.value = ''
-                                  }
-                                }}
-                                className="text-xs"
-                              >
-                                Add
-                              </Button>
-                            </div>
                           </div>
                         </div>
                       )
@@ -1040,95 +1177,98 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
             )}
           </div>
 
-          <div className="space-y-4">
-            <Label>Product Images</Label>
-            
-            {/* File Upload Section */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Input
-                  id="image"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleFileSelect}
-                  ref={fileInputRef}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="gap-2"
-                >
-                  <Upload className="h-4 w-4" />
-                  Upload Images
-                </Button>
+          {/* Product Images - Only show if product has no colors */}
+          {!(productType === 'variants' && (colorImages.size > 0 || variants.some(v => v.color))) && (
+            <div className="space-y-4">
+              <Label>Product Images</Label>
+              
+              {/* File Upload Section */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="image"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileSelect}
+                    ref={fileInputRef}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload Images
+                  </Button>
+                </div>
+
+                {/* Image Previews */}
+                {images.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
+                    {images.map((image) => (
+                      <div key={image.id} className="relative group">
+                        <img
+                          src={image.preview}
+                          alt="Preview"
+                          className="w-full h-32 object-cover rounded-md border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleRemoveImage(image.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Image Previews */}
-              {images.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
-                  {images.map((image) => (
-                    <div key={image.id} className="relative group">
-                      <img
-                        src={image.preview}
-                        alt="Preview"
-                        className="w-full h-32 object-cover rounded-md border"
-                      />
+              {/* URL Input Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Image URLs</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAddUrlInput}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add URL
+                  </Button>
+                </div>
+                {urlInputs.map((url, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={url}
+                      onChange={(e) => handleUrlChange(index, e.target.value)}
+                      placeholder="https://example.com/image.jpg"
+                      className="flex-1"
+                    />
+                    {urlInputs.length > 1 && (
                       <Button
                         type="button"
-                        variant="destructive"
+                        variant="ghost"
                         size="sm"
-                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleRemoveImage(image.id)}
+                        onClick={() => handleRemoveUrlInput(index)}
                       >
                         <X className="h-4 w-4" />
                       </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* URL Input Section */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Image URLs</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleAddUrlInput}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add URL
-                </Button>
+                    )}
+                  </div>
+                ))}
               </div>
-              {urlInputs.map((url, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input
-                    type="url"
-                    value={url}
-                    onChange={(e) => handleUrlChange(index, e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1"
-                  />
-                  {urlInputs.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveUrlInput(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
             </div>
-          </div>
+          )}
 
           <div className="flex gap-2">
             <Button type="submit" disabled={isLoading || isUploading}>
