@@ -49,10 +49,17 @@ export default function AdminProfile() {
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [sellersPagination, setSellersPagination] = useState({ page: 1, perPage: 10 })
+  const [sellersSortBy, setSellersSortBy] = useState<string>('date')
+  const [sellersSortOrder, setSellersSortOrder] = useState<'asc' | 'desc'>('desc')
   const [buyersPagination, setBuyersPagination] = useState({ page: 1, perPage: 10 })
+  const [buyersSortBy, setBuyersSortBy] = useState<string>('date')
+  const [buyersSortOrder, setBuyersSortOrder] = useState<'asc' | 'desc'>('desc')
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, perPage: 10 })
+  const [ordersSortBy, setOrdersSortBy] = useState<string>('date')
+  const [ordersSortOrder, setOrdersSortOrder] = useState<'asc' | 'desc'>('desc')
   const [allProducts, setAllProducts] = useState<any[]>([])
-  const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
+  const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0, limit: 10 })
+  const [productsLimit, setProductsLimit] = useState(10)
   const [productStats, setProductStats] = useState({ total: 0, pending: 0 })
   const [productsSortBy, setProductsSortBy] = useState<string>('createdAt')
   const [productsSortOrder, setProductsSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -60,8 +67,13 @@ export default function AdminProfile() {
   const [orderStats, setOrderStats] = useState<{ totalOrders: number; totalRevenue: number; pendingOrders: number; deliveredOrders: number } | null>(null)
   const [allReviews, setAllReviews] = useState<any[]>([])
   const [reviewsPagination, setReviewsPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
+  const [adminReviewsSortBy, setAdminReviewsSortBy] = useState<string>('date')
+  const [adminReviewsSortOrder, setAdminReviewsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [allReports, setAllReports] = useState<any[]>([])
   const [reportsPagination, setReportsPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
+  const [reportsStatusFilter, setReportsStatusFilter] = useState<string>('all')
+  const [reportsSortBy, setReportsSortBy] = useState<string>('date')
+  const [reportsSortOrder, setReportsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [pendingReportsCount, setPendingReportsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -77,6 +89,8 @@ export default function AdminProfile() {
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null)
   const [allPayouts, setAllPayouts] = useState<payoutService.Payout[]>([])
   const [payoutsPagination, setPayoutsPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
+  const [payoutsSortBy, setPayoutsSortBy] = useState<string>('date')
+  const [payoutsSortOrder, setPayoutsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [payoutStatusFilter, setPayoutStatusFilter] = useState<string>('all')
   const [payoutStats, setPayoutStats] = useState<payoutService.PayoutStats | null>(null)
   const [updatingPayoutId, setUpdatingPayoutId] = useState<string | null>(null)
@@ -121,6 +135,9 @@ export default function AdminProfile() {
   })
   const [allCategories, setAllCategories] = useState<categoryService.Category[]>([])
   const [categoriesLoading, setCategoriesLoading] = useState(false)
+  const [categoriesPagination, setCategoriesPagination] = useState({ page: 1, perPage: 10 })
+  const [categoriesSortBy, setCategoriesSortBy] = useState<string>('name')
+  const [categoriesSortOrder, setCategoriesSortOrder] = useState<'asc' | 'desc'>('asc')
   const [createCategoryDialogOpen, setCreateCategoryDialogOpen] = useState(false)
   const [editCategoryDialogOpen, setEditCategoryDialogOpen] = useState(false)
   const [deleteCategoryDialogOpen, setDeleteCategoryDialogOpen] = useState(false)
@@ -146,10 +163,11 @@ export default function AdminProfile() {
   const [selectedFeaturedCategories, setSelectedFeaturedCategories] = useState<string[]>([])
   const [selectedFeaturedProducts, setSelectedFeaturedProducts] = useState<string[]>([])
 
-  const fetchProducts = async (page = 1) => {
-    const response = await productService.getAllProducts({ page, limit: 10 })
+  const fetchProducts = async (page = 1, limit: number = productsLimit) => {
+    const response = await productService.getAllProducts({ page, limit })
     setAllProducts(response.products)
     setProductsPagination(response.pagination)
+    setProductsLimit(response.pagination.limit ?? limit)
   }
 
   // Get sorted products
@@ -180,9 +198,81 @@ export default function AdminProfile() {
     return sorted
   }
 
-  const fetchReviews = async (page = 1) => {
+  // Get sorted payouts (sorts current page results)
+  const getSortedPayouts = () => {
+    const getSellerName = (payout: payoutService.Payout) => {
+      const seller = (payout as any).sellerId
+      return (seller?.fullName || seller?.email || 'Unknown').toString()
+    }
+
+    const sorted = [...allPayouts].sort((a, b) => {
+      let comparison = 0
+      switch (payoutsSortBy) {
+        case 'date':
+          comparison = new Date(a.requestedAt).getTime() - new Date(b.requestedAt).getTime()
+          break
+        case 'amount':
+          comparison = a.amount - b.amount
+          break
+        case 'commission':
+          comparison = a.commission - b.commission
+          break
+        case 'netAmount':
+          comparison = a.netAmount - b.netAmount
+          break
+        case 'status':
+          comparison = a.status.toString().localeCompare(b.status.toString())
+          break
+        case 'seller':
+          comparison = getSellerName(a).localeCompare(getSellerName(b))
+          break
+        case 'orders':
+          comparison = a.orderCount - b.orderCount
+          break
+        default:
+          return 0
+      }
+      return payoutsSortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return sorted
+  }
+
+  // Get sorted categories (client-side)
+  const getSortedCategories = () => {
+    const sorted = [...allCategories].sort((a, b) => {
+      let comparison = 0
+      switch (categoriesSortBy) {
+        case 'name':
+          comparison = (a.name || '').localeCompare(b.name || '')
+          break
+        case 'slug':
+          comparison = (a.slug || '').localeCompare(b.slug || '')
+          break
+        case 'products':
+          comparison = (a.productCount || 0) - (b.productCount || 0)
+          break
+        case 'status':
+          comparison = (a.isActive ? 'Active' : 'Inactive').localeCompare(b.isActive ? 'Active' : 'Inactive')
+          break
+        default:
+          return 0
+      }
+      return categoriesSortOrder === 'asc' ? comparison : -comparison
+    })
+    return sorted
+  }
+
+  const categoriesTotalPages = Math.ceil(allCategories.length / categoriesPagination.perPage) || 1
+  const sortedCategories = getSortedCategories()
+  const paginatedCategories = sortedCategories.slice(
+    (categoriesPagination.page - 1) * categoriesPagination.perPage,
+    categoriesPagination.page * categoriesPagination.perPage
+  )
+
+  const fetchReviews = async (page = 1, limit: number = reviewsPagination.limit) => {
     try {
-      const response = await reviewService.getPendingReviews({ page, limit: 10 })
+      const response = await reviewService.getAllReviewsAdmin({ page, limit })
       setAllReviews(response.reviews)
       setReviewsPagination(response.pagination)
     } catch (error) {
@@ -190,14 +280,105 @@ export default function AdminProfile() {
     }
   }
 
-  const fetchReports = async (page = 1, status?: string) => {
+  // Get sorted admin reviews (sorts current page results)
+  const getSortedAdminReviews = () => {
+    const getProductTitle = (review: any) => {
+      const product = review.productId as any
+      return (typeof product === 'object' ? (product?.title || 'N/A') : 'N/A').toString()
+    }
+    const getUserLabel = (review: any) => {
+      const user = review.userId as any
+      const userEmail = typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+      const userName = typeof user === 'object' ? (user?.fullName || userEmail) : userEmail
+      return userName.toString()
+    }
+
+    const sorted = [...allReviews].sort((a, b) => {
+      let comparison = 0
+      switch (adminReviewsSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'rating':
+          comparison = (a.rating || 0) - (b.rating || 0)
+          break
+        case 'status':
+          comparison = (a.status || '').toString().localeCompare((b.status || '').toString())
+          break
+        case 'product':
+          comparison = getProductTitle(a).localeCompare(getProductTitle(b))
+          break
+        case 'user':
+          comparison = getUserLabel(a).localeCompare(getUserLabel(b))
+          break
+        default:
+          return 0
+      }
+      return adminReviewsSortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return sorted
+  }
+
+  const fetchReports = async (
+    page = 1,
+    status: string = reportsStatusFilter,
+    limit: number = reportsPagination.limit
+  ) => {
     try {
-      const response = await reportService.getAllReports({ page, limit: 10, status: status as any })
+      const params: any = { page, limit }
+      if (status && status !== 'all') {
+        params.status = status
+      }
+      const response = await reportService.getAllReports(params)
       setAllReports(response.reports)
       setReportsPagination(response.pagination)
     } catch (error) {
       console.error('Failed to fetch reports:', error)
     }
+  }
+
+  // Get sorted admin reports (sorts current page results)
+  const getSortedAdminReports = () => {
+    const getContentSummary = (report: any) => {
+      if (!report?.reportedContent) return 'Deleted'
+      if (report.reportedType === 'product') return (report.reportedContent.title || 'N/A').toString()
+      if (report.reportedType === 'user') return (report.reportedContent.fullName || report.reportedContent.email || 'N/A').toString()
+      if (report.reportedType === 'review') {
+        const comment = report.reportedContent.comment || ''
+        return comment ? (comment.substring(0, 50) + (comment.length > 50 ? '...' : '')) : 'No comment'
+      }
+      return 'N/A'
+    }
+
+    const sorted = [...allReports].sort((a, b) => {
+      let comparison = 0
+      switch (reportsSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'status':
+          comparison = (a.status || '').toString().localeCompare((b.status || '').toString())
+          break
+        case 'type':
+          comparison = (a.reportedType || '').toString().localeCompare((b.reportedType || '').toString())
+          break
+        case 'reportId':
+          comparison = (a.id || a._id || '').toString().localeCompare((b.id || b._id || '').toString())
+          break
+        case 'description':
+          comparison = (a.description || '').toString().localeCompare((b.description || '').toString())
+          break
+        case 'content':
+          comparison = getContentSummary(a).localeCompare(getContentSummary(b))
+          break
+        default:
+          return 0
+      }
+      return reportsSortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return sorted
   }
 
   const fetchPendingReportsCount = async () => {
@@ -209,9 +390,9 @@ export default function AdminProfile() {
     }
   }
 
-  const fetchPayouts = async (page = 1, status?: string) => {
+  const fetchPayouts = async (page = 1, status?: string, limit: number = payoutsPagination.limit) => {
     try {
-      const params: payoutService.GetAllPayoutsParams = { page, limit: 20 }
+      const params: payoutService.GetAllPayoutsParams = { page, limit }
       if (status && status !== 'all') {
         params.status = status
       }
@@ -450,14 +631,15 @@ export default function AdminProfile() {
 
   useEffect(() => {
     if (payoutStatusFilter) {
-      fetchPayouts(1, payoutStatusFilter)
+      // reset to first page when filter changes
+      setPayoutsPagination((p) => ({ ...p, page: 1 }))
       fetchPayoutStats()
     }
   }, [payoutStatusFilter])
 
   useEffect(() => {
-    fetchPayouts(payoutsPagination.page, payoutStatusFilter)
-  }, [payoutsPagination.page])
+    fetchPayouts(payoutsPagination.page, payoutStatusFilter, payoutsPagination.limit)
+  }, [payoutsPagination.page, payoutsPagination.limit, payoutStatusFilter])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -477,7 +659,7 @@ export default function AdminProfile() {
         setAllOrders(ordersData.orders)
         setOrderStats(ordersData.statistics)
         await fetchReviews(1)
-        await fetchReports(1)
+        await fetchReports(1, reportsStatusFilter, reportsPagination.limit)
         await fetchPendingReportsCount()
         await fetchCategories()
       } catch (error) {
@@ -489,6 +671,15 @@ export default function AdminProfile() {
 
     fetchData()
   }, [])
+
+  useEffect(() => {
+    // reset to first page when filter changes
+    setReportsPagination((p) => ({ ...p, page: 1 }))
+  }, [reportsStatusFilter])
+
+  useEffect(() => {
+    fetchReports(reportsPagination.page, reportsStatusFilter, reportsPagination.limit)
+  }, [reportsPagination.page, reportsPagination.limit, reportsStatusFilter])
 
   useEffect(() => {
     if (activeTab === 'home') {
@@ -831,20 +1022,131 @@ export default function AdminProfile() {
   const allBuyers = allUsers.filter((u) => u.role === 'customer')
   const allSellersFromUsers = allUsers.filter((u) => u.role === 'seller')
 
+  // Get sorted sellers
+  const getSortedSellers = () => {
+    const sortedSellers = [...allSellers].sort((a, b) => {
+      let comparison = 0
+      switch (sellersSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'businessName':
+          comparison = (a.businessName || '').localeCompare(b.businessName || '')
+          break
+        case 'owner':
+          const aUserName = typeof a.userId === 'object' && a.userId !== null
+            ? (a.userId as any).fullName || (a.userId as any).email || ''
+            : ''
+          const bUserName = typeof b.userId === 'object' && b.userId !== null
+            ? (b.userId as any).fullName || (b.userId as any).email || ''
+            : ''
+          comparison = aUserName.localeCompare(bUserName)
+          break
+        case 'email':
+          const aEmail = typeof a.userId === 'object' && a.userId !== null
+            ? (a.userId as any).email || ''
+            : ''
+          const bEmail = typeof b.userId === 'object' && b.userId !== null
+            ? (b.userId as any).email || ''
+            : ''
+          comparison = aEmail.localeCompare(bEmail)
+          break
+        case 'status':
+          comparison = (a.status || '').localeCompare(b.status || '')
+          break
+        default:
+          return 0
+      }
+      return sellersSortOrder === 'asc' ? comparison : -comparison
+    })
+    return sortedSellers
+  }
+
   const sellersTotalPages = Math.ceil(allSellers.length / sellersPagination.perPage) || 1
-  const paginatedSellers = allSellers.slice(
+  const sortedSellers = getSortedSellers()
+  const paginatedSellers = sortedSellers.slice(
     (sellersPagination.page - 1) * sellersPagination.perPage,
     sellersPagination.page * sellersPagination.perPage
   )
 
+  // Get sorted buyers
+  const getSortedBuyers = () => {
+    const sortedBuyers = [...allBuyers].sort((a, b) => {
+      let comparison = 0
+      switch (buyersSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'name':
+          const aName = (a.fullName || a.name || a.email || '').toString()
+          const bName = (b.fullName || b.name || b.email || '').toString()
+          comparison = aName.localeCompare(bName)
+          break
+        case 'email':
+          comparison = (a.email || '').toString().localeCompare((b.email || '').toString())
+          break
+        case 'role':
+          comparison = (a.role || '').toString().localeCompare((b.role || '').toString())
+          break
+        default:
+          return 0
+      }
+      return buyersSortOrder === 'asc' ? comparison : -comparison
+    })
+    return sortedBuyers
+  }
+
   const buyersTotalPages = Math.ceil(allBuyers.length / buyersPagination.perPage) || 1
-  const paginatedBuyers = allBuyers.slice(
+  const sortedBuyers = getSortedBuyers()
+  const paginatedBuyers = sortedBuyers.slice(
     (buyersPagination.page - 1) * buyersPagination.perPage,
     buyersPagination.page * buyersPagination.perPage
   )
 
+  // Get sorted orders
+  const getSortedOrders = () => {
+    const getCustomerLabel = (order: any) => {
+      const isGuestOrder = !order?.userId || (order as any)?.guestEmail
+      if (isGuestOrder) {
+        return `Guest${(order as any)?.guestEmail ? ` (${(order as any).guestEmail})` : ''}`
+      }
+      const user = order?.userId as any
+      return typeof user === 'object' ? (user?.email || 'N/A') : 'N/A'
+    }
+
+    const sortedOrders = [...allOrders].sort((a, b) => {
+      let comparison = 0
+      switch (ordersSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'amount':
+          comparison = (a.totalAmount || 0) - (b.totalAmount || 0)
+          break
+        case 'status':
+          comparison = (a.status || '').toString().localeCompare((b.status || '').toString())
+          break
+        case 'items':
+          comparison = (a.items?.length ?? 0) - (b.items?.length ?? 0)
+          break
+        case 'customer':
+          comparison = getCustomerLabel(a).localeCompare(getCustomerLabel(b))
+          break
+        case 'orderId':
+          comparison = (a._id || a.id || '').toString().localeCompare((b._id || b.id || '').toString())
+          break
+        default:
+          return 0
+      }
+      return ordersSortOrder === 'asc' ? comparison : -comparison
+    })
+
+    return sortedOrders
+  }
+
   const ordersTotalPages = Math.ceil(allOrders.length / ordersPagination.perPage) || 1
-  const paginatedOrders = allOrders.slice(
+  const sortedOrders = getSortedOrders()
+  const paginatedOrders = sortedOrders.slice(
     (ordersPagination.page - 1) * ordersPagination.perPage,
     ordersPagination.page * ordersPagination.perPage
   )
@@ -923,24 +1225,67 @@ export default function AdminProfile() {
                   <CardTitle>All Sellers</CardTitle>
                   <CardDescription>View and manage all sellers - review and approve seller applications</CardDescription>
                 </div>
-                <Button
-                  onClick={() => {
-                    setNewUser({
-                      email: '',
-                      password: '',
-                      fullName: '',
-                      role: 'seller',
-                      businessName: '',
-                      businessDescription: ''
-                    })
-                    setIsCreatingSeller(true)
-                    setCreateUserDialogOpen(true)
-                  }}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Seller
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={sellersPagination.perPage?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setSellersPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${sellersSortBy}-${sellersSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setSellersSortBy(newSortBy)
+                      setSellersSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="businessName-asc">Business Name (A-Z)</SelectItem>
+                      <SelectItem value="businessName-desc">Business Name (Z-A)</SelectItem>
+                      <SelectItem value="owner-asc">Owner (A-Z)</SelectItem>
+                      <SelectItem value="owner-desc">Owner (Z-A)</SelectItem>
+                      <SelectItem value="email-asc">Email (A-Z)</SelectItem>
+                      <SelectItem value="email-desc">Email (Z-A)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => {
+                      setNewUser({
+                        email: '',
+                        password: '',
+                        fullName: '',
+                        role: 'seller',
+                        businessName: '',
+                        businessDescription: ''
+                      })
+                      setIsCreatingSeller(true)
+                      setCreateUserDialogOpen(true)
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create Seller
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1032,27 +1377,90 @@ export default function AdminProfile() {
                   </table>
                 </div>
               )}
-              {allSellers.length > 0 && allSellers.length > sellersPagination.perPage && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={sellersPagination.page <= 1}
-                    onClick={() => setSellersPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {sellersPagination.page} of {sellersTotalPages} ({allSellers.length} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={sellersPagination.page >= sellersTotalPages}
-                    onClick={() => setSellersPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </Button>
+              {allSellers.length > 0 && (
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      Showing{' '}
+                      {allSellers.length === 0
+                        ? 0
+                        : (sellersPagination.page - 1) * sellersPagination.perPage + 1}
+                      –{Math.min(sellersPagination.page * sellersPagination.perPage, allSellers.length)} of{' '}
+                      {allSellers.length} sellers
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={sellersPagination.perPage?.toString() || '10'}
+                        onValueChange={(value) => {
+                          setSellersPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${sellersSortBy}-${sellersSortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          setSellersSortBy(newSortBy)
+                          setSellersSortOrder(newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                          <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                          <SelectItem value="businessName-asc">Business Name (A-Z)</SelectItem>
+                          <SelectItem value="businessName-desc">Business Name (Z-A)</SelectItem>
+                          <SelectItem value="owner-asc">Owner (A-Z)</SelectItem>
+                          <SelectItem value="owner-desc">Owner (Z-A)</SelectItem>
+                          <SelectItem value="email-asc">Email (A-Z)</SelectItem>
+                          <SelectItem value="email-desc">Email (Z-A)</SelectItem>
+                          <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                          <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {allSellers.length > sellersPagination.perPage && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={sellersPagination.page <= 1}
+                        onClick={() => setSellersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-muted-foreground min-w-[120px] text-center">
+                        Page {sellersPagination.page} of {sellersTotalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={sellersPagination.page >= sellersTotalPages}
+                        onClick={() => setSellersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1067,24 +1475,65 @@ export default function AdminProfile() {
                   <CardTitle>All Buyers</CardTitle>
                   <CardDescription>View and manage all customer accounts (buyers)</CardDescription>
                 </div>
-                <Button
-                  onClick={() => {
-                    setNewUser({
-                      email: '',
-                      password: '',
-                      fullName: '',
-                      role: 'customer',
-                      businessName: '',
-                      businessDescription: ''
-                    })
-                    setIsCreatingSeller(false)
-                    setCreateUserDialogOpen(true)
-                  }}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Buyer
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={buyersPagination.perPage?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setBuyersPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${buyersSortBy}-${buyersSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setBuyersSortBy(newSortBy)
+                      setBuyersSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                      <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                      <SelectItem value="email-asc">Email (A-Z)</SelectItem>
+                      <SelectItem value="email-desc">Email (Z-A)</SelectItem>
+                      <SelectItem value="role-asc">Role (A-Z)</SelectItem>
+                      <SelectItem value="role-desc">Role (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => {
+                      setNewUser({
+                        email: '',
+                        password: '',
+                        fullName: '',
+                        role: 'customer',
+                        businessName: '',
+                        businessDescription: ''
+                      })
+                      setIsCreatingSeller(false)
+                      setCreateUserDialogOpen(true)
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create Buyer
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1162,27 +1611,88 @@ export default function AdminProfile() {
                   </table>
                 </div>
               )}
-              {allBuyers.length > 0 && allBuyers.length > buyersPagination.perPage && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={buyersPagination.page <= 1}
-                    onClick={() => setBuyersPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {buyersPagination.page} of {buyersTotalPages} ({allBuyers.length} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={buyersPagination.page >= buyersTotalPages}
-                    onClick={() => setBuyersPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </Button>
+              {allBuyers.length > 0 && (
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      Showing{' '}
+                      {allBuyers.length === 0
+                        ? 0
+                        : (buyersPagination.page - 1) * buyersPagination.perPage + 1}
+                      –{Math.min(buyersPagination.page * buyersPagination.perPage, allBuyers.length)} of{' '}
+                      {allBuyers.length} buyers
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={buyersPagination.perPage?.toString() || '10'}
+                        onValueChange={(value) => {
+                          setBuyersPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${buyersSortBy}-${buyersSortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          setBuyersSortBy(newSortBy)
+                          setBuyersSortOrder(newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                          <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                          <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                          <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                          <SelectItem value="email-asc">Email (A-Z)</SelectItem>
+                          <SelectItem value="email-desc">Email (Z-A)</SelectItem>
+                          <SelectItem value="role-asc">Role (A-Z)</SelectItem>
+                          <SelectItem value="role-desc">Role (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {allBuyers.length > buyersPagination.perPage && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={buyersPagination.page <= 1}
+                        onClick={() => setBuyersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-muted-foreground min-w-[120px] text-center">
+                        Page {buyersPagination.page} of {buyersTotalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={buyersPagination.page >= buyersTotalPages}
+                        onClick={() => setBuyersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1197,30 +1707,51 @@ export default function AdminProfile() {
                   <CardTitle>Product Approvals</CardTitle>
                   <CardDescription>Review and approve product listings</CardDescription>
                 </div>
-                <Select
-                  value={`${productsSortBy}-${productsSortOrder}`}
-                  onValueChange={(value) => {
-                    const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
-                    setProductsSortBy(newSortBy)
-                    setProductsSortOrder(newSortOrder)
-                  }}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="createdAt-desc">Date (Newest First)</SelectItem>
-                    <SelectItem value="createdAt-asc">Date (Oldest First)</SelectItem>
-                    <SelectItem value="title-asc">Title (A-Z)</SelectItem>
-                    <SelectItem value="title-desc">Title (Z-A)</SelectItem>
-                    <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-                    <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                    <SelectItem value="category-asc">Category (A-Z)</SelectItem>
-                    <SelectItem value="category-desc">Category (Z-A)</SelectItem>
-                    <SelectItem value="status-asc">Status (A-Z)</SelectItem>
-                    <SelectItem value="status-desc">Status (Z-A)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={(productsPagination.limit ?? productsLimit).toString()}
+                    onValueChange={(value) => {
+                      const nextLimit = parseInt(value)
+                      setProductsLimit(nextLimit)
+                      fetchProducts(1, nextLimit)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${productsSortBy}-${productsSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setProductsSortBy(newSortBy)
+                      setProductsSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="createdAt-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="createdAt-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                      <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                      <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                      <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                      <SelectItem value="category-asc">Category (A-Z)</SelectItem>
+                      <SelectItem value="category-desc">Category (Z-A)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1248,7 +1779,8 @@ export default function AdminProfile() {
                         const productId = product._id || product.id
                         const seller = product.sellerId as any
                         const sellerName = typeof seller === 'object' ? (seller?.fullName || seller?.email || 'N/A') : 'N/A'
-                        const rowNo = (productsPagination.page - 1) * 10 + index + 1
+                        const limit = productsPagination.limit ?? productsLimit
+                        const rowNo = (productsPagination.page - 1) * limit + index + 1
 
                         return (
                           <tr key={productId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
@@ -1348,26 +1880,94 @@ export default function AdminProfile() {
                 </div>
               )}
               {allProducts.length > 0 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={productsPagination.page <= 1}
-                    onClick={() => fetchProducts(productsPagination.page - 1)}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {productsPagination.page} of {productsPagination.pages} ({productsPagination.total} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={productsPagination.page >= productsPagination.pages}
-                    onClick={() => fetchProducts(productsPagination.page + 1)}
-                  >
-                    Next
-                  </Button>
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      Showing{' '}
+                      {productsPagination.total === 0
+                        ? 0
+                        : (productsPagination.page - 1) * (productsPagination.limit ?? productsLimit) + 1}
+                      –{Math.min(
+                        productsPagination.page * (productsPagination.limit ?? productsLimit),
+                        productsPagination.total
+                      )}{' '}
+                      of {productsPagination.total} products
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={(productsPagination.limit ?? productsLimit).toString()}
+                        onValueChange={(value) => {
+                          const nextLimit = parseInt(value)
+                          setProductsLimit(nextLimit)
+                          fetchProducts(1, nextLimit)
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${productsSortBy}-${productsSortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          setProductsSortBy(newSortBy)
+                          setProductsSortOrder(newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="createdAt-desc">Date (Newest First)</SelectItem>
+                          <SelectItem value="createdAt-asc">Date (Oldest First)</SelectItem>
+                          <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                          <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                          <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                          <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                          <SelectItem value="category-asc">Category (A-Z)</SelectItem>
+                          <SelectItem value="category-desc">Category (Z-A)</SelectItem>
+                          <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                          <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {productsPagination.pages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={productsPagination.page <= 1}
+                        onClick={() => fetchProducts(productsPagination.page - 1, productsPagination.limit ?? productsLimit)}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-muted-foreground min-w-[120px] text-center">
+                        Page {productsPagination.page} of {productsPagination.pages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={productsPagination.page >= productsPagination.pages}
+                        onClick={() => fetchProducts(productsPagination.page + 1, productsPagination.limit ?? productsLimit)}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1377,8 +1977,57 @@ export default function AdminProfile() {
         <TabsContent value="orders" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>All Orders</CardTitle>
-              <CardDescription>View and manage all marketplace orders</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>All Orders</CardTitle>
+                  <CardDescription>View and manage all marketplace orders</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={ordersPagination.perPage?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setOrdersPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${ordersSortBy}-${ordersSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setOrdersSortBy(newSortBy)
+                      setOrdersSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="amount-desc">Amount (High to Low)</SelectItem>
+                      <SelectItem value="amount-asc">Amount (Low to High)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                      <SelectItem value="items-desc">Items (High to Low)</SelectItem>
+                      <SelectItem value="items-asc">Items (Low to High)</SelectItem>
+                      <SelectItem value="customer-asc">Customer (A-Z)</SelectItem>
+                      <SelectItem value="customer-desc">Customer (Z-A)</SelectItem>
+                      <SelectItem value="orderId-asc">Order ID (A-Z)</SelectItem>
+                      <SelectItem value="orderId-desc">Order ID (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -1444,26 +2093,89 @@ export default function AdminProfile() {
                 </div>
               )}
               {allOrders.length > 0 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={ordersPagination.page <= 1}
-                    onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page - 1 }))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {ordersPagination.page} of {ordersTotalPages} ({allOrders.length} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={ordersPagination.page >= ordersTotalPages}
-                    onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page + 1 }))}
-                  >
-                    Next
-                  </Button>
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      Showing{' '}
+                      {allOrders.length === 0 ? 0 : (ordersPagination.page - 1) * ordersPagination.perPage + 1}
+                      –{Math.min(ordersPagination.page * ordersPagination.perPage, allOrders.length)} of{' '}
+                      {allOrders.length} orders
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={ordersPagination.perPage?.toString() || '10'}
+                        onValueChange={(value) => {
+                          setOrdersPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${ordersSortBy}-${ordersSortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          setOrdersSortBy(newSortBy)
+                          setOrdersSortOrder(newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                          <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                          <SelectItem value="amount-desc">Amount (High to Low)</SelectItem>
+                          <SelectItem value="amount-asc">Amount (Low to High)</SelectItem>
+                          <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                          <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                          <SelectItem value="items-desc">Items (High to Low)</SelectItem>
+                          <SelectItem value="items-asc">Items (Low to High)</SelectItem>
+                          <SelectItem value="customer-asc">Customer (A-Z)</SelectItem>
+                          <SelectItem value="customer-desc">Customer (Z-A)</SelectItem>
+                          <SelectItem value="orderId-asc">Order ID (A-Z)</SelectItem>
+                          <SelectItem value="orderId-desc">Order ID (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {allOrders.length > ordersPagination.perPage && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={ordersPagination.page <= 1}
+                        onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page - 1 }))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-muted-foreground min-w-[120px] text-center">
+                        Page {ordersPagination.page} of {ordersTotalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={ordersPagination.page >= ordersTotalPages}
+                        onClick={() => setOrdersPagination((p) => ({ ...p, page: p.page + 1 }))}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1473,14 +2185,62 @@ export default function AdminProfile() {
         <TabsContent value="reviews" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Review Moderation</CardTitle>
-              <CardDescription>Review and approve pending product reviews</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Review Moderation</CardTitle>
+                  <CardDescription>Review and manage all product reviews</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={reviewsPagination.limit?.toString() || '10'}
+                    onValueChange={(value) => {
+                      const nextLimit = parseInt(value)
+                      setReviewsPagination((p) => ({ ...p, limit: nextLimit, page: 1 }))
+                      fetchReviews(1, nextLimit)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${adminReviewsSortBy}-${adminReviewsSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setAdminReviewsSortBy(newSortBy)
+                      setAdminReviewsSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="rating-desc">Rating (High to Low)</SelectItem>
+                      <SelectItem value="rating-asc">Rating (Low to High)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                      <SelectItem value="product-asc">Product (A-Z)</SelectItem>
+                      <SelectItem value="product-desc">Product (Z-A)</SelectItem>
+                      <SelectItem value="user-asc">User (A-Z)</SelectItem>
+                      <SelectItem value="user-desc">User (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <p className="text-muted-foreground">Loading reviews...</p>
               ) : allReviews.length === 0 ? (
-                <p className="text-muted-foreground">No pending reviews</p>
+                <p className="text-muted-foreground">No reviews found</p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-full text-sm">
@@ -1497,7 +2257,7 @@ export default function AdminProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {allReviews.map((review, index) => {
+                      {getSortedAdminReviews().map((review, index) => {
                         const reviewId = review.id || review._id
                         const product = review.productId as any
                         const productTitle = typeof product === 'object' ? (product?.title || 'N/A') : 'N/A'
@@ -1525,16 +2285,9 @@ export default function AdminProfile() {
                               {review.comment || '—'}
                             </td>
                             <td className="px-4 py-3">
-                              <Badge
-                                variant={
-                                  review.status === 'approved' ? 'default' :
-                                  review.status === 'rejected' ? 'destructive' :
-                                  'secondary'
-                                }
-                                className="capitalize"
-                              >
+                              <span className="text-muted-foreground capitalize">
                                 {review.status}
-                              </Badge>
+                              </span>
                             </td>
                             <td className="px-4 py-3 text-muted-foreground">
                               {new Date(review.createdAt).toLocaleDateString()}
@@ -1622,35 +2375,96 @@ export default function AdminProfile() {
                   </table>
                 </div>
               )}
-              {allReviews.length > 0 && reviewsPagination.pages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={reviewsPagination.page <= 1}
-                    onClick={() => {
-                      const newPage = reviewsPagination.page - 1
-                      setReviewsPagination((p) => ({ ...p, page: newPage }))
-                      fetchReviews(newPage)
-                    }}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {reviewsPagination.page} of {reviewsPagination.pages} ({reviewsPagination.total} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={reviewsPagination.page >= reviewsPagination.pages}
-                    onClick={() => {
-                      const newPage = reviewsPagination.page + 1
-                      setReviewsPagination((p) => ({ ...p, page: newPage }))
-                      fetchReviews(newPage)
-                    }}
-                  >
-                    Next
-                  </Button>
+              {allReviews.length > 0 && (
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm mt-4">
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      Showing {((reviewsPagination.page - 1) * reviewsPagination.limit) + 1}–
+                      {Math.min(reviewsPagination.page * reviewsPagination.limit, reviewsPagination.total)} of{' '}
+                      {reviewsPagination.total} reviews
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={reviewsPagination.limit?.toString() || '10'}
+                        onValueChange={(value) => {
+                          const nextLimit = parseInt(value)
+                          setReviewsPagination((p) => ({ ...p, limit: nextLimit, page: 1 }))
+                          fetchReviews(1, nextLimit)
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${adminReviewsSortBy}-${adminReviewsSortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          setAdminReviewsSortBy(newSortBy)
+                          setAdminReviewsSortOrder(newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                          <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                          <SelectItem value="rating-desc">Rating (High to Low)</SelectItem>
+                          <SelectItem value="rating-asc">Rating (Low to High)</SelectItem>
+                          <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                          <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                          <SelectItem value="product-asc">Product (A-Z)</SelectItem>
+                          <SelectItem value="product-desc">Product (Z-A)</SelectItem>
+                          <SelectItem value="user-asc">User (A-Z)</SelectItem>
+                          <SelectItem value="user-desc">User (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {reviewsPagination.pages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewsPagination.page <= 1}
+                        onClick={() => {
+                          const newPage = Math.max(1, reviewsPagination.page - 1)
+                          setReviewsPagination((p) => ({ ...p, page: newPage }))
+                          fetchReviews(newPage, reviewsPagination.limit)
+                        }}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-muted-foreground min-w-[120px] text-center">
+                        Page {reviewsPagination.page} of {reviewsPagination.pages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewsPagination.page >= reviewsPagination.pages}
+                        onClick={() => {
+                          const newPage = Math.min(reviewsPagination.pages, reviewsPagination.page + 1)
+                          setReviewsPagination((p) => ({ ...p, page: newPage }))
+                          fetchReviews(newPage, reviewsPagination.limit)
+                        }}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1660,8 +2474,68 @@ export default function AdminProfile() {
         <TabsContent value="reports" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Reports Management</CardTitle>
-              <CardDescription>Review and manage user reports for products, users, and reviews</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Reports Management</CardTitle>
+                  <CardDescription>Review and manage user reports for products, users, and reviews</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={reportsPagination.limit?.toString() || '10'}
+                    onValueChange={(value) => {
+                      const nextLimit = parseInt(value)
+                      setReportsPagination((p) => ({ ...p, limit: nextLimit, page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${reportsSortBy}-${reportsSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setReportsSortBy(newSortBy)
+                      setReportsSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                      <SelectItem value="type-asc">Type (A-Z)</SelectItem>
+                      <SelectItem value="type-desc">Type (Z-A)</SelectItem>
+                      <SelectItem value="reportId-asc">Report ID (A-Z)</SelectItem>
+                      <SelectItem value="reportId-desc">Report ID (Z-A)</SelectItem>
+                      <SelectItem value="content-asc">Content (A-Z)</SelectItem>
+                      <SelectItem value="content-desc">Content (Z-A)</SelectItem>
+                      <SelectItem value="description-asc">Description (A-Z)</SelectItem>
+                      <SelectItem value="description-desc">Description (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={reportsStatusFilter} onValueChange={setReportsStatusFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="dismissed">Dismissed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -1687,14 +2561,8 @@ export default function AdminProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {allReports.map((report, index) => {
+                      {getSortedAdminReports().map((report, index) => {
                         const reportId = report.id || report._id
-                        const reporter = report.reporterId as any
-                        const reporterEmail = typeof reporter === 'object' ? (reporter?.email || 'N/A') : 'N/A'
-                        const reporterName = typeof reporter === 'object' ? (reporter?.fullName || reporterEmail) : reporterEmail
-                        const isResolving = resolvingReportId === reportId
-                        const isDismissing = dismissingReportId === reportId
-                        const isPending = report.status === 'pending'
                         const limit = reportsPagination.limit || 10
                         const rowNo = ((reportsPagination.page - 1) * limit) + index + 1
 
@@ -1726,16 +2594,9 @@ export default function AdminProfile() {
                               </Badge>
                             </td>
                             <td className="h-16 px-4 align-middle">
-                              <Badge
-                                variant={
-                                  report.status === 'resolved' ? 'default' :
-                                  report.status === 'dismissed' ? 'secondary' :
-                                  'destructive'
-                                }
-                                className="capitalize"
-                              >
+                              <span className="text-muted-foreground capitalize">
                                 {report.status}
-                              </Badge>
+                              </span>
                             </td>
                             <td className="h-16 px-4 align-middle">
                               <p className="max-w-[200px] truncate" title={report.description || 'No description'}>
@@ -1782,35 +2643,103 @@ export default function AdminProfile() {
                   </table>
                 </div>
               )}
-              {allReports.length > 0 && reportsPagination.pages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={reportsPagination.page <= 1}
-                    onClick={() => {
-                      const newPage = reportsPagination.page - 1
-                      setReportsPagination((p) => ({ ...p, page: newPage }))
-                      fetchReports(newPage)
-                    }}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {reportsPagination.page} of {reportsPagination.pages} ({reportsPagination.total} total)
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={reportsPagination.page >= reportsPagination.pages}
-                    onClick={() => {
-                      const newPage = reportsPagination.page + 1
-                      setReportsPagination((p) => ({ ...p, page: newPage }))
-                      fetchReports(newPage)
-                    }}
-                  >
-                    Next
-                  </Button>
+              {allReports.length > 0 && (
+                <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm mt-4">
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      Showing {((reportsPagination.page - 1) * reportsPagination.limit) + 1}–
+                      {Math.min(reportsPagination.page * reportsPagination.limit, reportsPagination.total)} of{' '}
+                      {reportsPagination.total} reports
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={reportsPagination.limit?.toString() || '10'}
+                        onValueChange={(value) => {
+                          const nextLimit = parseInt(value)
+                          setReportsPagination((p) => ({ ...p, limit: nextLimit, page: 1 }))
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${reportsSortBy}-${reportsSortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          setReportsSortBy(newSortBy)
+                          setReportsSortOrder(newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                          <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                          <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                          <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                          <SelectItem value="type-asc">Type (A-Z)</SelectItem>
+                          <SelectItem value="type-desc">Type (Z-A)</SelectItem>
+                          <SelectItem value="reportId-asc">Report ID (A-Z)</SelectItem>
+                          <SelectItem value="reportId-desc">Report ID (Z-A)</SelectItem>
+                          <SelectItem value="content-asc">Content (A-Z)</SelectItem>
+                          <SelectItem value="content-desc">Content (Z-A)</SelectItem>
+                          <SelectItem value="description-asc">Description (A-Z)</SelectItem>
+                          <SelectItem value="description-desc">Description (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Filter:</span>
+                      <Select value={reportsStatusFilter} onValueChange={setReportsStatusFilter}>
+                        <SelectTrigger className="w-[140px] h-8">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="resolved">Resolved</SelectItem>
+                          <SelectItem value="dismissed">Dismissed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {reportsPagination.pages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reportsPagination.page <= 1}
+                        onClick={() => setReportsPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-muted-foreground min-w-[120px] text-center">
+                        Page {reportsPagination.page} of {reportsPagination.pages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reportsPagination.page >= reportsPagination.pages}
+                        onClick={() => setReportsPagination((p) => ({ ...p, page: Math.min(reportsPagination.pages, p.page + 1) }))}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -2033,7 +2962,7 @@ export default function AdminProfile() {
                             return
                           }
 
-                          await fetchReports(reportsPagination.page)
+                          await fetchReports(reportsPagination.page, reportsStatusFilter, reportsPagination.limit)
                           await fetchPendingReportsCount()
                           setEditReportDialogOpen(false)
                           setEditingReportNotes('')
@@ -2060,48 +2989,6 @@ export default function AdminProfile() {
         </TabsContent>
 
         <TabsContent value="payouts" className="space-y-4">
-          {/* Payout Statistics */}
-          {payoutStats && (
-            <div className="grid md:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Total Payouts</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{payoutStats.total}</div>
-                  <p className="text-xs text-muted-foreground">All time</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Pending</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-orange-600">{payoutStats.pending}</div>
-                  <p className="text-xs text-muted-foreground">${payoutStats.pendingAmount.toFixed(2)}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Completed</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">{payoutStats.completed}</div>
-                  <p className="text-xs text-muted-foreground">${payoutStats.totalPaidOut.toFixed(2)}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Total Commission</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">${payoutStats.totalCommission.toFixed(2)}</div>
-                  <p className="text-xs text-muted-foreground">Marketplace earnings</p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
           {/* Payouts List */}
           <Card>
             <CardHeader>
@@ -2110,19 +2997,66 @@ export default function AdminProfile() {
                   <CardTitle>Payout Management</CardTitle>
                   <CardDescription>Review and process seller payout requests</CardDescription>
                 </div>
-                <Select value={payoutStatusFilter} onValueChange={setPayoutStatusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="processing">Processing</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={payoutsPagination.limit?.toString() || '20'}
+                    onValueChange={(value) => {
+                      setPayoutsPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${payoutsSortBy}-${payoutsSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setPayoutsSortBy(newSortBy)
+                      setPayoutsSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="amount-desc">Amount (High to Low)</SelectItem>
+                      <SelectItem value="amount-asc">Amount (Low to High)</SelectItem>
+                      <SelectItem value="commission-desc">Commission (High to Low)</SelectItem>
+                      <SelectItem value="commission-asc">Commission (Low to High)</SelectItem>
+                      <SelectItem value="netAmount-desc">Net Amount (High to Low)</SelectItem>
+                      <SelectItem value="netAmount-asc">Net Amount (Low to High)</SelectItem>
+                      <SelectItem value="orders-desc">Orders (High to Low)</SelectItem>
+                      <SelectItem value="orders-asc">Orders (Low to High)</SelectItem>
+                      <SelectItem value="seller-asc">Seller (A-Z)</SelectItem>
+                      <SelectItem value="seller-desc">Seller (Z-A)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={payoutStatusFilter} onValueChange={setPayoutStatusFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -2145,7 +3079,7 @@ export default function AdminProfile() {
                         </tr>
                       </thead>
                       <tbody>
-                        {allPayouts.map((payout) => {
+                        {getSortedPayouts().map((payout) => {
                           const seller = (payout as any).sellerId
                           const sellerName = seller?.fullName || seller?.email || 'Unknown'
                           return (
@@ -2200,13 +3134,66 @@ export default function AdminProfile() {
                       </tbody>
                     </table>
                   </div>
-                  {payoutsPagination.pages > 1 && (
-                    <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                  <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                    <div className="flex items-center gap-4">
                       <span className="text-muted-foreground">
                         Showing {((payoutsPagination.page - 1) * payoutsPagination.limit) + 1}–
                         {Math.min(payoutsPagination.page * payoutsPagination.limit, payoutsPagination.total)} of{' '}
                         {payoutsPagination.total} payouts
                       </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Items per page:</span>
+                        <Select
+                          value={payoutsPagination.limit?.toString() || '20'}
+                          onValueChange={(value) => {
+                            setPayoutsPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                          }}
+                        >
+                          <SelectTrigger className="w-[100px] h-8">
+                            <SelectValue placeholder="Items per page" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Sort by:</span>
+                        <Select
+                          value={`${payoutsSortBy}-${payoutsSortOrder}`}
+                          onValueChange={(value) => {
+                            const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                            setPayoutsSortBy(newSortBy)
+                            setPayoutsSortOrder(newSortOrder)
+                          }}
+                        >
+                          <SelectTrigger className="w-[160px] h-8">
+                            <SelectValue placeholder="Sort by" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                            <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                            <SelectItem value="amount-desc">Amount (High to Low)</SelectItem>
+                            <SelectItem value="amount-asc">Amount (Low to High)</SelectItem>
+                            <SelectItem value="commission-desc">Commission (High to Low)</SelectItem>
+                            <SelectItem value="commission-asc">Commission (Low to High)</SelectItem>
+                            <SelectItem value="netAmount-desc">Net Amount (High to Low)</SelectItem>
+                            <SelectItem value="netAmount-asc">Net Amount (Low to High)</SelectItem>
+                            <SelectItem value="orders-desc">Orders (High to Low)</SelectItem>
+                            <SelectItem value="orders-asc">Orders (Low to High)</SelectItem>
+                            <SelectItem value="seller-asc">Seller (A-Z)</SelectItem>
+                            <SelectItem value="seller-desc">Seller (Z-A)</SelectItem>
+                            <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                            <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {payoutsPagination.pages > 1 && (
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
@@ -2230,8 +3217,8 @@ export default function AdminProfile() {
                           <ChevronRight className="h-4 w-4" />
                         </Button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -2353,16 +3340,57 @@ export default function AdminProfile() {
                   <CardTitle>Category Management</CardTitle>
                   <CardDescription>Create, edit, and manage product categories</CardDescription>
                 </div>
-                <Button
-                  onClick={() => {
-                    setNewCategory({ name: '', slug: '', description: '' })
-                    setCreateCategoryDialogOpen(true)
-                  }}
-                  className="gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Category
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={categoriesPagination.perPage?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setCategoriesPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${categoriesSortBy}-${categoriesSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setCategoriesSortBy(newSortBy)
+                      setCategoriesSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                      <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                      <SelectItem value="slug-asc">Slug (A-Z)</SelectItem>
+                      <SelectItem value="slug-desc">Slug (Z-A)</SelectItem>
+                      <SelectItem value="products-desc">Products (High to Low)</SelectItem>
+                      <SelectItem value="products-asc">Products (Low to High)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => {
+                      setNewCategory({ name: '', slug: '', description: '' })
+                      setCreateCategoryDialogOpen(true)
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create Category
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -2384,11 +3412,12 @@ export default function AdminProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {allCategories.map((category, index) => {
+                      {paginatedCategories.map((category, index) => {
                         const categoryId = category._id || category.id
+                        const rowNo = (categoriesPagination.page - 1) * categoriesPagination.perPage + index + 1
                         return (
                           <tr key={categoryId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                            <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
                             <td className="px-4 py-3 font-medium">{category.name}</td>
                             <td className="px-4 py-3 text-muted-foreground">
                               {category.description || '—'}
@@ -2397,9 +3426,9 @@ export default function AdminProfile() {
                               {category.productCount || 0}
                             </td>
                             <td className="px-4 py-3">
-                              <Badge variant={category.isActive ? 'default' : 'secondary'}>
+                              <span className="text-muted-foreground">
                                 {category.isActive ? 'Active' : 'Inactive'}
-                              </Badge>
+                              </span>
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
@@ -2429,6 +3458,88 @@ export default function AdminProfile() {
                       })}
                     </tbody>
                   </table>
+                  <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                    <div className="flex items-center gap-4">
+                      <span className="text-muted-foreground">
+                        Showing{' '}
+                        {allCategories.length === 0
+                          ? 0
+                          : (categoriesPagination.page - 1) * categoriesPagination.perPage + 1}
+                        –{Math.min(categoriesPagination.page * categoriesPagination.perPage, allCategories.length)} of{' '}
+                        {allCategories.length} categories
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Items per page:</span>
+                        <Select
+                          value={categoriesPagination.perPage?.toString() || '10'}
+                          onValueChange={(value) => {
+                            setCategoriesPagination((p) => ({ ...p, perPage: parseInt(value), page: 1 }))
+                          }}
+                        >
+                          <SelectTrigger className="w-[100px] h-8">
+                            <SelectValue placeholder="Items per page" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Sort by:</span>
+                        <Select
+                          value={`${categoriesSortBy}-${categoriesSortOrder}`}
+                          onValueChange={(value) => {
+                            const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                            setCategoriesSortBy(newSortBy)
+                            setCategoriesSortOrder(newSortOrder)
+                          }}
+                        >
+                          <SelectTrigger className="w-[160px] h-8">
+                            <SelectValue placeholder="Sort by" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                            <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                            <SelectItem value="slug-asc">Slug (A-Z)</SelectItem>
+                            <SelectItem value="slug-desc">Slug (Z-A)</SelectItem>
+                            <SelectItem value="products-desc">Products (High to Low)</SelectItem>
+                            <SelectItem value="products-asc">Products (Low to High)</SelectItem>
+                            <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                            <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {categoriesTotalPages > 1 && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={categoriesPagination.page <= 1}
+                          onClick={() => setCategoriesPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="text-muted-foreground min-w-[120px] text-center">
+                          Page {categoriesPagination.page} of {categoriesTotalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={categoriesPagination.page >= categoriesTotalPages}
+                          onClick={() => setCategoriesPagination((p) => ({ ...p, page: Math.min(categoriesTotalPages, p.page + 1) }))}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -3255,7 +4366,7 @@ export default function AdminProfile() {
                   <CardTitle className="text-sm font-medium">Reviews</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{allReviews.length}</div>
+                  <div className="text-2xl font-bold">{reviewsPagination.total}</div>
                   <p className="text-xs text-muted-foreground">Total reviews</p>
                 </CardContent>
               </Card>

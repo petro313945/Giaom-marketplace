@@ -30,12 +30,13 @@ interface ProductsListProps {
   onProductUpdated?: () => void
   onPageChange?: (page: number) => void
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void
+  onLimitChange?: (limit: number) => void
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
   headerAction?: React.ReactNode
 }
 
-export default function ProductsList({ products, pagination, onProductUpdated, onPageChange, onSortChange, sortBy = 'createdAt', sortOrder = 'desc', headerAction }: ProductsListProps) {
+export default function ProductsList({ products, pagination, onProductUpdated, onPageChange, onSortChange, onLimitChange, sortBy = 'createdAt', sortOrder = 'desc', headerAction }: ProductsListProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -99,32 +100,49 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
             <CardDescription>Manage your product listings</CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            {onLimitChange && pagination && (
+              <Select
+                value={pagination.limit?.toString() || '10'}
+                onValueChange={(value) => {
+                  onLimitChange(parseInt(value))
+                }}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Items per page" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5 per page</SelectItem>
+                  <SelectItem value="10">10 per page</SelectItem>
+                  <SelectItem value="20">20 per page</SelectItem>
+                  <SelectItem value="50">50 per page</SelectItem>
+                  <SelectItem value="100">100 per page</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {onSortChange && (
-              <div className="flex items-center gap-2">
-                <Select
-                  value={`${sortBy}-${sortOrder}`}
-                  onValueChange={(value) => {
-                    const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
-                    onSortChange(newSortBy, newSortOrder)
-                  }}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="createdAt-desc">Newest First</SelectItem>
-                    <SelectItem value="createdAt-asc">Oldest First</SelectItem>
-                    <SelectItem value="title-asc">Title (A-Z)</SelectItem>
-                    <SelectItem value="title-desc">Title (Z-A)</SelectItem>
-                    <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-                    <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                    <SelectItem value="stockQuantity-desc">Stock (High to Low)</SelectItem>
-                    <SelectItem value="stockQuantity-asc">Stock (Low to High)</SelectItem>
-                    <SelectItem value="status-asc">Status (A-Z)</SelectItem>
-                    <SelectItem value="status-desc">Status (Z-A)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select
+                value={`${sortBy}-${sortOrder}`}
+                onValueChange={(value) => {
+                  const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                  onSortChange(newSortBy, newSortOrder)
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                  <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                  <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                  <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                  <SelectItem value="createdAt-desc">Newest First</SelectItem>
+                  <SelectItem value="createdAt-asc">Oldest First</SelectItem>
+                  <SelectItem value="stockQuantity-desc">Stock (High to Low)</SelectItem>
+                  <SelectItem value="stockQuantity-asc">Stock (Low to High)</SelectItem>
+                  <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                  <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                </SelectContent>
+              </Select>
             )}
             {headerAction}
           </div>
@@ -204,9 +222,61 @@ export default function ProductsList({ products, pagination, onProductUpdated, o
             </table>
             {pagination && (
               <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
-                <span className="text-muted-foreground">
-                  Showing {((pagination.page - 1) * (pagination.limit ?? 10)) + 1}–{Math.min(pagination.page * (pagination.limit ?? 10), pagination.total)} of {pagination.total} products
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="text-muted-foreground">
+                    Showing {((pagination.page - 1) * (pagination.limit ?? 10)) + 1}–{Math.min(pagination.page * (pagination.limit ?? 10), pagination.total)} of {pagination.total} products
+                  </span>
+                  {onLimitChange && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Items per page:</span>
+                      <Select
+                        value={pagination.limit?.toString() || '10'}
+                        onValueChange={(value) => {
+                          onLimitChange(parseInt(value))
+                        }}
+                      >
+                        <SelectTrigger className="w-[100px] h-8">
+                          <SelectValue placeholder="Items per page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {onSortChange && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Sort by:</span>
+                      <Select
+                        value={`${sortBy}-${sortOrder}`}
+                        onValueChange={(value) => {
+                          const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                          onSortChange(newSortBy, newSortOrder)
+                        }}
+                      >
+                        <SelectTrigger className="w-[160px] h-8">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                          <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                          <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                          <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                          <SelectItem value="createdAt-desc">Newest First</SelectItem>
+                          <SelectItem value="createdAt-asc">Oldest First</SelectItem>
+                          <SelectItem value="stockQuantity-desc">Stock (High to Low)</SelectItem>
+                          <SelectItem value="stockQuantity-asc">Stock (Low to High)</SelectItem>
+                          <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                          <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"

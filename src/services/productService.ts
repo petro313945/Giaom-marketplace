@@ -49,6 +49,9 @@ export const getProducts = async (params?: {
   minPrice?: number;
   maxPrice?: number;
   sellerId?: string;
+  size?: string;
+  color?: string;
+  stockStatus?: 'inStock' | 'outOfStock';
   page?: number;
   limit?: number;
   sortBy?: string;

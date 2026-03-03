@@ -104,6 +104,14 @@ export const getPendingReviews = async (
   return response.data;
 };
 
+// Admin: Get all reviews
+export const getAllReviewsAdmin = async (
+  params?: { page?: number; limit?: number; status?: 'all' | 'pending' | 'approved' | 'rejected' }
+): Promise<ReviewsResponse> => {
+  const response = await api.get<ReviewsResponse>('/reviews/admin/all', { params });
+  return response.data;
+};
+
 // Admin: Approve review
 export const approveReview = async (reviewId: string): Promise<{ message: string; review: Review }> => {
   const response = await api.put<{ message: string; review: Review }>(
@@ -117,5 +125,13 @@ export const rejectReview = async (reviewId: string): Promise<{ message: string;
   const response = await api.put<{ message: string; review: Review }>(
     `/reviews/${reviewId}/reject`
   );
+  return response.data;
+};
+
+// Seller: Get all reviews for seller's products
+export const getSellerReviews = async (
+  params?: { page?: number; limit?: number }
+): Promise<ReviewsResponse> => {
+  const response = await api.get<ReviewsResponse>('/reviews/seller', { params });
   return response.data;
 };

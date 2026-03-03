@@ -9,6 +9,7 @@ import ProductDetail from './pages/ProductDetail'
 import Category from './pages/Category'
 import Store from './pages/Store'
 import Search from './pages/Search'
+import Deals from './pages/Deals'
 import OrderDetail from './pages/OrderDetail'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -32,6 +33,7 @@ function App() {
               <Route path="/category/:slug" element={<Category />} />
               <Route path="/store/:sellerId" element={<Store />} />
               <Route path="/search" element={<Search />} />
+              <Route path="/deals" element={<Deals />} />
               <Route 
                 path="/order/:id" 
                 element={

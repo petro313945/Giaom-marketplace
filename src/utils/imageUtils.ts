@@ -31,6 +31,7 @@ export const getImageUrl = (imageUrl?: string | null): string => {
  * Get the first image URL from an array or single image
  * Useful for product listings that show one image
  * For variant products, checks variant images if product-level images don't exist
+ * Handles both simple products (with imageUrl or imageUrls) and variant products
  */
 export const getFirstImageUrl = (product: { 
   imageUrl?: string; 
@@ -42,24 +43,27 @@ export const getFirstImageUrl = (product: {
     return '/placeholder.svg';
   }
   
-  // First, check product-level images (priority)
+  // First, check product-level imageUrls array (for both simple and variant products)
   if (product.imageUrls && Array.isArray(product.imageUrls) && product.imageUrls.length > 0) {
     const firstImage = product.imageUrls[0];
-    if (firstImage) {
+    if (firstImage && firstImage.trim() !== '') {
       return getImageUrl(firstImage);
     }
   }
-  if (product.imageUrl) {
+  
+  // Second, check product-level imageUrl (singular) - important for simple products
+  // This handles backward compatibility and simple products that only have imageUrl set
+  if (product.imageUrl && product.imageUrl.trim() !== '') {
     return getImageUrl(product.imageUrl);
   }
   
-  // If no product-level images, check variants for images
+  // If no product-level images, check variants for images (variant products only)
   if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
     // Find the first variant that has images
     for (const variant of product.variants) {
       if (variant && variant.imageUrls && Array.isArray(variant.imageUrls) && variant.imageUrls.length > 0) {
         const firstVariantImage = variant.imageUrls[0];
-        if (firstVariantImage) {
+        if (firstVariantImage && firstVariantImage.trim() !== '') {
           return getImageUrl(firstVariantImage);
         }
       }
@@ -72,7 +76,7 @@ export const getFirstImageUrl = (product: {
     if (colors.length > 0) {
       const firstColor = colors[0];
       const colorImages = product.colorImages[firstColor];
-      if (Array.isArray(colorImages) && colorImages.length > 0 && colorImages[0]) {
+      if (Array.isArray(colorImages) && colorImages.length > 0 && colorImages[0] && colorImages[0].trim() !== '') {
         return getImageUrl(colorImages[0]);
       }
     }

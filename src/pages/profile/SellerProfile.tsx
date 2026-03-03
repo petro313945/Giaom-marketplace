@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, BarChart3, PieChart, Wallet, Download, CheckCircle2, User } from 'lucide-react'
+import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, BarChart3, PieChart, Wallet, Download, CheckCircle2, User, Star, StoreIcon } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import {
@@ -35,8 +35,10 @@ import * as orderService from '../../services/orderService'
 import * as analyticsService from '../../services/analyticsService'
 import * as payoutService from '../../services/payoutService'
 import * as userService from '../../services/userService'
+import * as reviewService from '../../services/reviewService'
 import type { Product } from '../../services/productService'
 import type { Order } from '../../services/orderService'
+import type { Review } from '../../services/reviewService'
 
 interface ProfileFormData {
   fullName: string
@@ -45,6 +47,7 @@ interface ProfileFormData {
 }
 import AddProductForm from '../../components/AddProductForm'
 import ProductsList from '../../components/ProductsList'
+import RatingDisplay from '../../components/RatingDisplay'
 import { getFirstImageUrl } from '../../utils/imageUtils'
 import {
   LineChart,
@@ -69,7 +72,7 @@ export default function SellerProfile() {
   const [searchParams, setSearchParams] = useSearchParams()
   
   // Valid tab values
-  const validTabs = ['sold-products', 'products', 'orders', 'analytics', 'payments', 'profile']
+  const validTabs = ['sold-products', 'products', 'orders', 'analytics', 'payments', 'reviews', 'profile']
   
   // Get active tab from URL or use default
   const urlTab = searchParams.get('tab')
@@ -79,9 +82,12 @@ export default function SellerProfile() {
   
   const [sellerProfile, setSellerProfile] = useState<sellerService.SellerProfile | null>(null)
   const [products, setProducts] = useState<Product[]>([])
-  const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0 })
+  const [productsPagination, setProductsPagination] = useState({ page: 1, pages: 1, total: 0, limit: 10 })
+  const [productsLimit, setProductsLimit] = useState(10)
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, limit: 10 })
+  const [ordersSortBy, setOrdersSortBy] = useState<string>('date')
+  const [ordersSortOrder, setOrdersSortOrder] = useState<'asc' | 'desc'>('desc')
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<analyticsService.AnalyticsResponse | null>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
@@ -101,6 +107,11 @@ export default function SellerProfile() {
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [reviewsPagination, setReviewsPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
+  const [reviewsSortBy, setReviewsSortBy] = useState<string>('date')
+  const [reviewsSortOrder, setReviewsSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [reviewsLoading, setReviewsLoading] = useState(false)
 
   const {
     register,
@@ -115,10 +126,10 @@ export default function SellerProfile() {
     },
   })
 
-  const fetchProducts = async (page = 1, sortBy?: string, sortOrder?: 'asc' | 'desc') => {
+  const fetchProducts = async (page = 1, sortBy?: string, sortOrder?: 'asc' | 'desc', limit?: number) => {
     const response = await productService.getSellerProducts({ 
       page, 
-      limit: 10,
+      limit: limit || productsLimit,
       sortBy: sortBy || productsSortBy,
       sortOrder: sortOrder || productsSortOrder
     })
@@ -129,7 +140,12 @@ export default function SellerProfile() {
   const handleProductsSortChange = (sortBy: string, sortOrder: 'asc' | 'desc') => {
     setProductsSortBy(sortBy)
     setProductsSortOrder(sortOrder)
-    fetchProducts(1, sortBy, sortOrder)
+    fetchProducts(1, sortBy, sortOrder, productsLimit)
+  }
+
+  const handleProductsLimitChange = (limit: number) => {
+    setProductsLimit(limit)
+    fetchProducts(1, productsSortBy, productsSortOrder, limit)
   }
 
   useEffect(() => {
@@ -137,7 +153,7 @@ export default function SellerProfile() {
       try {
         const [profile, productsResponse, ordersData] = await Promise.all([
           sellerService.getCurrentSellerProfile().catch(() => ({ sellerProfile: null })),
-          productService.getSellerProducts({ page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' }),
+          productService.getSellerProducts({ page: 1, limit: productsLimit, sortBy: 'createdAt', sortOrder: 'desc' }),
           orderService.getSellerOrders().catch(() => ({ orders: [] })),
         ])
         setSellerProfile(profile.sellerProfile || null)
@@ -237,6 +253,12 @@ export default function SellerProfile() {
     }
   }, [analyticsPeriod, user?.role, payoutPage])
 
+  useEffect(() => {
+    if (user?.role === 'seller' && activeTab === 'reviews') {
+      fetchSellerReviews(reviewsPagination.page)
+    }
+  }, [activeTab, reviewsPagination.page, user?.role])
+
   const fetchEarningsSummary = async () => {
     try {
       const summary = await payoutService.getEarningsSummary()
@@ -255,6 +277,24 @@ export default function SellerProfile() {
       console.error('Failed to fetch payout history:', error)
     } finally {
       setPayoutLoading(false)
+    }
+  }
+
+  const fetchSellerReviews = async (page: number = 1) => {
+    setReviewsLoading(true)
+    try {
+      const response = await reviewService.getSellerReviews({ page, limit: 10 })
+      setReviews(response.reviews)
+      setReviewsPagination(response.pagination)
+    } catch (error) {
+      console.error('Failed to fetch seller reviews:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load reviews',
+        variant: 'destructive',
+      })
+    } finally {
+      setReviewsLoading(false)
     }
   }
 
@@ -357,22 +397,48 @@ export default function SellerProfile() {
     })
 
     // Calculate average price and order count for each product
-    const products = Array.from(productMap.values()).map(product => ({
-      productId: product.productId,
-      title: product.title,
-      imageUrl: product.imageUrl,
-      imageUrls: product.imageUrls,
-      totalQuantity: product.totalQuantity,
-      totalRevenue: product.totalRevenue,
-      orderCount: product.orderIds.size,
-      orderIds: Array.from(product.orderIds),
-      buyerEmails: Array.from(product.buyerEmails),
-      lastSoldDate: product.lastSoldDate,
-      averagePrice: product.totalRevenue / product.totalQuantity
-    }))
+    // Also enrich with image data from products list if missing
+    const sellerProductsList = products // Reference to state variable
+    const soldProductsList = Array.from(productMap.values()).map(product => {
+      // If image data is missing, try to get it from the products list
+      let imageUrl = product.imageUrl
+      let imageUrls = product.imageUrls
+      let variants = undefined
+      let colorImages = undefined
+      
+      if ((!imageUrl && !imageUrls) || (imageUrls && imageUrls.length === 0)) {
+        const productFromList = sellerProductsList.find(p => {
+          const pId = p._id || p.id || ''
+          return pId === product.productId || pId.toString() === product.productId.toString()
+        })
+        
+        if (productFromList) {
+          imageUrl = productFromList.imageUrl
+          imageUrls = productFromList.imageUrls
+          variants = productFromList.variants
+          colorImages = productFromList.colorImages
+        }
+      }
+      
+      return {
+        productId: product.productId,
+        title: product.title,
+        imageUrl,
+        imageUrls,
+        variants,
+        colorImages,
+        totalQuantity: product.totalQuantity,
+        totalRevenue: product.totalRevenue,
+        orderCount: product.orderIds.size,
+        orderIds: Array.from(product.orderIds),
+        buyerEmails: Array.from(product.buyerEmails),
+        lastSoldDate: product.lastSoldDate,
+        averagePrice: product.totalRevenue / product.totalQuantity
+      }
+    })
 
     // Sort products
-    products.sort((a, b) => {
+    soldProductsList.sort((a, b) => {
       let comparison = 0
       switch (soldProductsSortBy) {
         case 'revenue':
@@ -399,7 +465,79 @@ export default function SellerProfile() {
       return soldProductsSortOrder === 'asc' ? comparison : -comparison
     })
 
-    return products
+    return soldProductsList
+  }
+
+  // Get sorted orders
+  const getSortedOrders = () => {
+    const sortedOrders = [...orders].sort((a, b) => {
+      let comparison = 0
+      switch (ordersSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'amount':
+          const aTotal = a.items?.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0) || a.totalAmount
+          const bTotal = b.items?.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0) || b.totalAmount
+          comparison = aTotal - bTotal
+          break
+        case 'status':
+          comparison = a.status.localeCompare(b.status)
+          break
+        case 'items':
+          comparison = (a.items?.length || 0) - (b.items?.length || 0)
+          break
+        case 'orderId':
+          const aId = a.id || (a as any)._id || ''
+          const bId = b.id || (b as any)._id || ''
+          comparison = aId.localeCompare(bId)
+          break
+        default:
+          return 0
+      }
+      return ordersSortOrder === 'asc' ? comparison : -comparison
+    })
+    return sortedOrders
+  }
+
+  // Get sorted reviews
+  const getSortedReviews = () => {
+    const sortedReviews = [...reviews].sort((a, b) => {
+      let comparison = 0
+      switch (reviewsSortBy) {
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case 'rating':
+          comparison = a.rating - b.rating
+          break
+        case 'status':
+          comparison = a.status.localeCompare(b.status)
+          break
+        case 'product':
+          const aProductTitle = typeof a.productId === 'object' && a.productId !== null
+            ? (a.productId as any).title || ''
+            : ''
+          const bProductTitle = typeof b.productId === 'object' && b.productId !== null
+            ? (b.productId as any).title || ''
+            : ''
+          comparison = aProductTitle.localeCompare(bProductTitle)
+          break
+        case 'customer':
+          const aUserName = typeof a.userId === 'object' && a.userId !== null
+            ? (a.userId as any).fullName || (a.userId as any).email || ''
+            : ''
+          const bUserName = typeof b.userId === 'object' && b.userId !== null
+            ? (b.userId as any).fullName || (b.userId as any).email || ''
+            : ''
+          comparison = aUserName.localeCompare(bUserName)
+          break
+        default:
+          return 0
+      }
+      return reviewsSortOrder === 'asc' ? comparison : -comparison
+    })
+    return sortedReviews
   }
 
   if (loading) {
@@ -424,15 +562,27 @@ export default function SellerProfile() {
               )}
             </h1>
           </div>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => setStatisticsDialogOpen(true)}
-            className="gap-2"
-          >
-            <BarChart3 className="h-4 w-4" />
-            View Statistic
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+            >
+              <Link to="/">
+                <StoreIcon className="h-4 w-4 mr-2" />
+                Marketplace
+              </Link>
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setStatisticsDialogOpen(true)}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              View Statistic
+            </Button>
+          </div>
         </div>
         {sellerProfile?.status === 'pending' && (
           <p className="text-sm text-orange-600 mt-2">Your seller account is pending approval</p>
@@ -466,6 +616,10 @@ export default function SellerProfile() {
             <DollarSign className="h-4 w-4" />
             Payments
           </TabsTrigger>
+          <TabsTrigger value="reviews" className="gap-2">
+            <Star className="h-4 w-4" />
+            Reviews
+          </TabsTrigger>
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />
             Profile
@@ -477,8 +631,9 @@ export default function SellerProfile() {
             products={products}
             pagination={productsPagination}
             onProductUpdated={handleProductAdded}
-            onPageChange={(page) => fetchProducts(page, productsSortBy, productsSortOrder)}
+            onPageChange={(page) => fetchProducts(page, productsSortBy, productsSortOrder, productsLimit)}
             onSortChange={handleProductsSortChange}
+            onLimitChange={handleProductsLimitChange}
             sortBy={productsSortBy}
             sortOrder={productsSortOrder}
             headerAction={<AddProductForm onProductAdded={handleProductAdded} />}
@@ -493,32 +648,51 @@ export default function SellerProfile() {
                   <CardTitle>Sold Products</CardTitle>
                   <CardDescription>View all products that have been sold</CardDescription>
                 </div>
-                <Select
-                  value={`${soldProductsSortBy}-${soldProductsSortOrder}`}
-                  onValueChange={(value) => {
-                    const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
-                    setSoldProductsSortBy(newSortBy)
-                    setSoldProductsSortOrder(newSortOrder)
-                  }}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="revenue-desc">Revenue (High to Low)</SelectItem>
-                    <SelectItem value="revenue-asc">Revenue (Low to High)</SelectItem>
-                    <SelectItem value="quantity-desc">Quantity (High to Low)</SelectItem>
-                    <SelectItem value="quantity-asc">Quantity (Low to High)</SelectItem>
-                    <SelectItem value="orders-desc">Orders (High to Low)</SelectItem>
-                    <SelectItem value="orders-asc">Orders (Low to High)</SelectItem>
-                    <SelectItem value="date-desc">Date (Newest First)</SelectItem>
-                    <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
-                    <SelectItem value="title-asc">Title (A-Z)</SelectItem>
-                    <SelectItem value="title-desc">Title (Z-A)</SelectItem>
-                    <SelectItem value="averagePrice-desc">Avg Price (High to Low)</SelectItem>
-                    <SelectItem value="averagePrice-asc">Avg Price (Low to High)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={soldProductsPagination.limit?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setSoldProductsPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${soldProductsSortBy}-${soldProductsSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setSoldProductsSortBy(newSortBy)
+                      setSoldProductsSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="revenue-desc">Revenue (High to Low)</SelectItem>
+                      <SelectItem value="revenue-asc">Revenue (Low to High)</SelectItem>
+                      <SelectItem value="quantity-desc">Quantity (High to Low)</SelectItem>
+                      <SelectItem value="quantity-asc">Quantity (Low to High)</SelectItem>
+                      <SelectItem value="orders-desc">Orders (High to Low)</SelectItem>
+                      <SelectItem value="orders-asc">Orders (Low to High)</SelectItem>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                      <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                      <SelectItem value="averagePrice-desc">Avg Price (High to Low)</SelectItem>
+                      <SelectItem value="averagePrice-asc">Avg Price (Low to High)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -553,7 +727,12 @@ export default function SellerProfile() {
                         <tbody>
                           {paginatedProducts.map((product, index) => {
                             const rowNo = (soldProductsPagination.page - 1) * soldProductsPagination.limit + index + 1
-                            const productImage = getFirstImageUrl({ imageUrl: product.imageUrl, imageUrls: product.imageUrls })
+                            const productImage = getFirstImageUrl({ 
+                              imageUrl: product.imageUrl, 
+                              imageUrls: product.imageUrls,
+                              variants: product.variants,
+                              colorImages: product.colorImages
+                            })
                             return (
                               <tr key={product.productId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                                 <td className="h-16 px-4 align-middle font-medium">{rowNo}</td>
@@ -616,14 +795,65 @@ export default function SellerProfile() {
                       </table>
                     </div>
                     <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
-                      <span className="text-muted-foreground">
-                        Showing{' '}
-                        {soldProducts.length === 0
-                          ? 0
-                          : (soldProductsPagination.page - 1) * soldProductsPagination.limit + 1}
-                        –{Math.min(soldProductsPagination.page * soldProductsPagination.limit, soldProducts.length)} of{' '}
-                        {soldProducts.length} products
-                      </span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-muted-foreground">
+                          Showing{' '}
+                          {soldProducts.length === 0
+                            ? 0
+                            : (soldProductsPagination.page - 1) * soldProductsPagination.limit + 1}
+                          –{Math.min(soldProductsPagination.page * soldProductsPagination.limit, soldProducts.length)} of{' '}
+                          {soldProducts.length} products
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Items per page:</span>
+                          <Select
+                            value={soldProductsPagination.limit?.toString() || '10'}
+                            onValueChange={(value) => {
+                              setSoldProductsPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                            }}
+                          >
+                            <SelectTrigger className="w-[100px] h-8">
+                              <SelectValue placeholder="Items per page" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="5">5</SelectItem>
+                              <SelectItem value="10">10</SelectItem>
+                              <SelectItem value="20">20</SelectItem>
+                              <SelectItem value="50">50</SelectItem>
+                              <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Sort by:</span>
+                          <Select
+                            value={`${soldProductsSortBy}-${soldProductsSortOrder}`}
+                            onValueChange={(value) => {
+                              const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                              setSoldProductsSortBy(newSortBy)
+                              setSoldProductsSortOrder(newSortOrder)
+                            }}
+                          >
+                            <SelectTrigger className="w-[160px] h-8">
+                              <SelectValue placeholder="Sort by" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="revenue-desc">Revenue (High to Low)</SelectItem>
+                              <SelectItem value="revenue-asc">Revenue (Low to High)</SelectItem>
+                              <SelectItem value="quantity-desc">Quantity (High to Low)</SelectItem>
+                              <SelectItem value="quantity-asc">Quantity (Low to High)</SelectItem>
+                              <SelectItem value="orders-desc">Orders (High to Low)</SelectItem>
+                              <SelectItem value="orders-asc">Orders (Low to High)</SelectItem>
+                              <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                              <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                              <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                              <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                              <SelectItem value="averagePrice-desc">Avg Price (High to Low)</SelectItem>
+                              <SelectItem value="averagePrice-asc">Avg Price (Low to High)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
@@ -671,8 +901,55 @@ export default function SellerProfile() {
         <TabsContent value="orders" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>Manage and fulfill customer orders</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Recent Orders</CardTitle>
+                  <CardDescription>Manage and fulfill customer orders</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={ordersPagination.limit?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setOrdersPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${ordersSortBy}-${ordersSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setOrdersSortBy(newSortBy)
+                      setOrdersSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="amount-desc">Amount (High to Low)</SelectItem>
+                      <SelectItem value="amount-asc">Amount (Low to High)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                      <SelectItem value="items-desc">Items (High to Low)</SelectItem>
+                      <SelectItem value="items-asc">Items (Low to High)</SelectItem>
+                      <SelectItem value="orderId-asc">Order ID (A-Z)</SelectItem>
+                      <SelectItem value="orderId-desc">Order ID (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {orders.length === 0 ? (
@@ -692,56 +969,108 @@ export default function SellerProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {orders
-                        .slice(
-                          (ordersPagination.page - 1) * ordersPagination.limit,
-                          ordersPagination.page * ordersPagination.limit
-                        )
-                        .map((order, index) => {
-                          const orderId = order.id || (order as any)._id
-                          const sellerOrderTotal = order.items?.reduce((sum: number, item: any) => {
-                            return sum + (item.price * item.quantity)
-                          }, 0) || order.totalAmount
-                          const rowNo = (ordersPagination.page - 1) * ordersPagination.limit + index + 1
-                          return (
-                            <tr key={orderId} className="border-b transition-colors hover:bg-muted/50 last:border-0">
-                              <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
-                              <td className="px-4 py-3 font-medium">#{orderId.slice(-8)}</td>
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {new Date(order.createdAt).toLocaleDateString()}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
-                                  {order.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 font-medium">${sellerOrderTotal.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => navigate(`/order/${orderId}`)}
-                                >
-                                  View Details
-                                </Button>
-                              </td>
-                            </tr>
+                      {(() => {
+                        const sortedOrders = getSortedOrders()
+                        return sortedOrders
+                          .slice(
+                            (ordersPagination.page - 1) * ordersPagination.limit,
+                            ordersPagination.page * ordersPagination.limit
                           )
-                        })}
+                          .map((order, index) => {
+                            const orderId = order.id || (order as any)._id
+                            const sellerOrderTotal = order.items?.reduce((sum: number, item: any) => {
+                              return sum + (item.price * item.quantity)
+                            }, 0) || order.totalAmount
+                            const rowNo = (ordersPagination.page - 1) * ordersPagination.limit + index + 1
+                            return (
+                              <tr key={orderId} className="border-b transition-colors hover:bg-muted/50 last:border-0">
+                                <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                                <td className="px-4 py-3 font-medium">#{orderId.slice(-8)}</td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {new Date(order.createdAt).toLocaleDateString()}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`${ORDER_STATUS_CLASS} ${getOrderStatusColor(order.status)}`}>
+                                    {order.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-medium">${sellerOrderTotal.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => navigate(`/order/${orderId}`)}
+                                  >
+                                    View Details
+                                  </Button>
+                                </td>
+                              </tr>
+                            )
+                          })
+                      })()}
                     </tbody>
                   </table>
                   <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
-                    <span className="text-muted-foreground">
-                      Showing{' '}
-                      {orders.length === 0
-                        ? 0
-                        : (ordersPagination.page - 1) * ordersPagination.limit + 1}
-                      –{Math.min(ordersPagination.page * ordersPagination.limit, orders.length)} of{' '}
-                      {orders.length} orders
-                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-muted-foreground">
+                        Showing{' '}
+                        {orders.length === 0
+                          ? 0
+                          : (ordersPagination.page - 1) * ordersPagination.limit + 1}
+                        –{Math.min(ordersPagination.page * ordersPagination.limit, orders.length)} of{' '}
+                        {orders.length} orders
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Items per page:</span>
+                        <Select
+                          value={ordersPagination.limit?.toString() || '10'}
+                          onValueChange={(value) => {
+                            setOrdersPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                          }}
+                        >
+                          <SelectTrigger className="w-[100px] h-8">
+                            <SelectValue placeholder="Items per page" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Sort by:</span>
+                        <Select
+                          value={`${ordersSortBy}-${ordersSortOrder}`}
+                          onValueChange={(value) => {
+                            const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                            setOrdersSortBy(newSortBy)
+                            setOrdersSortOrder(newSortOrder)
+                          }}
+                        >
+                          <SelectTrigger className="w-[160px] h-8">
+                            <SelectValue placeholder="Sort by" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                            <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                            <SelectItem value="amount-desc">Amount (High to Low)</SelectItem>
+                            <SelectItem value="amount-asc">Amount (Low to High)</SelectItem>
+                            <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                            <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                            <SelectItem value="items-desc">Items (High to Low)</SelectItem>
+                            <SelectItem value="items-asc">Items (Low to High)</SelectItem>
+                            <SelectItem value="orderId-asc">Order ID (A-Z)</SelectItem>
+                            <SelectItem value="orderId-desc">Order ID (Z-A)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
@@ -1165,6 +1494,230 @@ export default function SellerProfile() {
                 </div>
               ) : (
                 <p className="text-center text-muted-foreground py-8">No payout history</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reviews" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Product Reviews</CardTitle>
+                  <CardDescription>View all reviews for your products</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={reviewsPagination.limit?.toString() || '10'}
+                    onValueChange={(value) => {
+                      setReviewsPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 per page</SelectItem>
+                      <SelectItem value="10">10 per page</SelectItem>
+                      <SelectItem value="20">20 per page</SelectItem>
+                      <SelectItem value="50">50 per page</SelectItem>
+                      <SelectItem value="100">100 per page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={`${reviewsSortBy}-${reviewsSortOrder}`}
+                    onValueChange={(value) => {
+                      const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                      setReviewsSortBy(newSortBy)
+                      setReviewsSortOrder(newSortOrder)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                      <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                      <SelectItem value="rating-desc">Rating (High to Low)</SelectItem>
+                      <SelectItem value="rating-asc">Rating (Low to High)</SelectItem>
+                      <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                      <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                      <SelectItem value="product-asc">Product (A-Z)</SelectItem>
+                      <SelectItem value="product-desc">Product (Z-A)</SelectItem>
+                      <SelectItem value="customer-asc">Customer (A-Z)</SelectItem>
+                      <SelectItem value="customer-desc">Customer (Z-A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {reviewsLoading ? (
+                <p className="text-center text-muted-foreground py-8">Loading reviews...</p>
+              ) : reviews.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No reviews yet</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="h-12 px-4 text-left font-medium w-12">No.</th>
+                          <th className="h-12 px-4 text-left font-medium">Product</th>
+                          <th className="h-12 px-4 text-left font-medium">Customer</th>
+                          <th className="h-12 px-4 text-left font-medium">Rating</th>
+                          <th className="h-12 px-4 text-left font-medium">Comment</th>
+                          <th className="h-12 px-4 text-left font-medium">Status</th>
+                          <th className="h-12 px-4 text-left font-medium">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const sortedReviews = getSortedReviews()
+                          return sortedReviews
+                            .slice(
+                              (reviewsPagination.page - 1) * reviewsPagination.limit,
+                              reviewsPagination.page * reviewsPagination.limit
+                            )
+                            .map((review, index) => {
+                              const rowNo = (reviewsPagination.page - 1) * reviewsPagination.limit + index + 1
+                              const productTitle = typeof review.productId === 'object' && review.productId !== null
+                                ? (review.productId as any).title || 'Unknown Product'
+                                : 'Unknown Product'
+                              const userName = typeof review.userId === 'object' && review.userId !== null
+                                ? (review.userId as any).fullName || (review.userId as any).email || 'Anonymous'
+                                : 'Anonymous'
+                              
+                              return (
+                                <tr key={review.id || review._id} className="border-b transition-colors hover:bg-muted/50 last:border-0">
+                                  <td className="px-4 py-3 text-muted-foreground">{rowNo}</td>
+                                  <td className="px-4 py-3 font-medium max-w-[200px]">
+                                    <p className="truncate" title={productTitle}>{productTitle}</p>
+                                  </td>
+                                  <td className="px-4 py-3 text-muted-foreground">{userName}</td>
+                                  <td className="px-4 py-3">
+                                    <RatingDisplay rating={review.rating} size="sm" />
+                                  </td>
+                                  <td className="px-4 py-3 text-muted-foreground max-w-[300px]">
+                                    {review.comment ? (
+                                      <p className="truncate" title={review.comment}>{review.comment}</p>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Badge
+                                      variant={
+                                        review.status === 'approved'
+                                          ? 'default'
+                                          : review.status === 'rejected'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                      }
+                                    >
+                                      {review.status}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-muted-foreground">
+                                    {new Date(review.createdAt).toLocaleDateString()}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 px-4 py-3 border-t bg-muted/30 text-sm">
+                      <div className="flex items-center gap-4">
+                        <span className="text-muted-foreground">
+                          Showing{' '}
+                          {reviewsPagination.total === 0
+                            ? 0
+                            : (reviewsPagination.page - 1) * reviewsPagination.limit + 1}
+                          –{Math.min(reviewsPagination.page * reviewsPagination.limit, reviewsPagination.total)} of{' '}
+                          {reviewsPagination.total} reviews
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Items per page:</span>
+                          <Select
+                            value={reviewsPagination.limit?.toString() || '10'}
+                            onValueChange={(value) => {
+                              setReviewsPagination((p) => ({ ...p, limit: parseInt(value), page: 1 }))
+                            }}
+                          >
+                            <SelectTrigger className="w-[100px] h-8">
+                              <SelectValue placeholder="Items per page" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="5">5</SelectItem>
+                              <SelectItem value="10">10</SelectItem>
+                              <SelectItem value="20">20</SelectItem>
+                              <SelectItem value="50">50</SelectItem>
+                              <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Sort by:</span>
+                          <Select
+                            value={`${reviewsSortBy}-${reviewsSortOrder}`}
+                            onValueChange={(value) => {
+                              const [newSortBy, newSortOrder] = value.split('-') as [string, 'asc' | 'desc']
+                              setReviewsSortBy(newSortBy)
+                              setReviewsSortOrder(newSortOrder)
+                            }}
+                          >
+                            <SelectTrigger className="w-[160px] h-8">
+                              <SelectValue placeholder="Sort by" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                              <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                              <SelectItem value="rating-desc">Rating (High to Low)</SelectItem>
+                              <SelectItem value="rating-asc">Rating (Low to High)</SelectItem>
+                              <SelectItem value="status-asc">Status (A-Z)</SelectItem>
+                              <SelectItem value="status-desc">Status (Z-A)</SelectItem>
+                              <SelectItem value="product-asc">Product (A-Z)</SelectItem>
+                              <SelectItem value="product-desc">Product (Z-A)</SelectItem>
+                              <SelectItem value="customer-asc">Customer (A-Z)</SelectItem>
+                              <SelectItem value="customer-desc">Customer (Z-A)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={reviewsPagination.page <= 1}
+                          onClick={() => {
+                            const newPage = Math.max(1, reviewsPagination.page - 1)
+                            setReviewsPagination((p) => ({ ...p, page: newPage }))
+                          }}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="text-muted-foreground min-w-[120px] text-center">
+                          Page {reviewsPagination.page} of {reviewsPagination.pages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={reviewsPagination.page >= reviewsPagination.pages}
+                          onClick={() => {
+                            const newPage = Math.min(reviewsPagination.pages, reviewsPagination.page + 1)
+                            setReviewsPagination((p) => ({ ...p, page: newPage }))
+                          }}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                </div>
               )}
             </CardContent>
           </Card>
