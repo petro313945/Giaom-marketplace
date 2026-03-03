@@ -3,7 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, Package, Truck, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ArrowLeft, Package, Truck, CheckCircle, XCircle, ExternalLink, RefreshCw } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
@@ -16,10 +18,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import * as orderService from '../services/orderService'
+import * as marketplaceSettingsService from '../services/marketplaceSettingsService'
 import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../utils/orderStatusUtils'
-import type { Order } from '../services/orderService'
+import type { Order, RefundRequest } from '../services/orderService'
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>()
@@ -35,6 +46,12 @@ export default function OrderDetail() {
   const [trackingNumber, setTrackingNumber] = useState('')
   const [carrier, setCarrier] = useState('')
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const [marketplaceSettings, setMarketplaceSettings] = useState<marketplaceSettingsService.MarketplaceSettings | null>(null)
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false)
+  const [refundReason, setRefundReason] = useState<string>('')
+  const [refundDescription, setRefundDescription] = useState('')
+  const [submittingRefund, setSubmittingRefund] = useState(false)
+  const [refundRequest, setRefundRequest] = useState<RefundRequest | null>(null)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -53,8 +70,34 @@ export default function OrderDetail() {
       }
     }
 
+    const fetchMarketplaceSettings = async () => {
+      try {
+        const settings = await marketplaceSettingsService.getMarketplaceSettings()
+        setMarketplaceSettings(settings)
+      } catch (error) {
+        console.error('Failed to fetch marketplace settings:', error)
+      }
+    }
+
+    const fetchRefundRequest = async () => {
+      if (!id || !user) return
+      try {
+        const response = await orderService.getRefundRequests()
+        const request = response.refundRequests.find(
+          (req) => (req.orderId as any)?.id === id || (req.orderId as any)?._id === id || req.orderId === id
+        )
+        if (request) {
+          setRefundRequest(request)
+        }
+      } catch (error) {
+        // Silently fail - refund request might not exist
+      }
+    }
+
     fetchOrder()
-  }, [id])
+    fetchMarketplaceSettings()
+    fetchRefundRequest()
+  }, [id, user])
 
   const handleStatusUpdate = async (newStatus: string) => {
     if (!id || !order) return
@@ -145,7 +188,87 @@ export default function OrderDetail() {
 
   const canUpdateStatus = user?.role === 'seller' || user?.role === 'admin'
   const canCancelOrder = user?.role === 'customer' && (order?.status === 'pending' || order?.status === 'processing')
+  const canRequestRefund = (user?.role === 'customer' || !user) && 
+    order && 
+    (order.status === 'delivered' || order.status === 'shipped') &&
+    !refundRequest &&
+    order.paymentStatus !== 'refunded'
   const statusOptions = ['pending', 'processing', 'shipped', 'delivered', 'cancelled']
+  const isSeller = user?.role === 'seller'
+
+  const handleRefundRequest = async () => {
+    if (!id || !refundReason) return
+
+    try {
+      setSubmittingRefund(true)
+      const response = await orderService.requestRefund(id, refundReason, refundDescription || undefined)
+      setRefundRequest(response.refundRequest)
+      setRefundDialogOpen(false)
+      setRefundReason('')
+      setRefundDescription('')
+      toast({
+        title: 'Refund Request Submitted',
+        description: 'Your refund request has been submitted and is under review.',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || 'Failed to submit refund request',
+        variant: 'destructive',
+      })
+    } finally {
+      setSubmittingRefund(false)
+    }
+  }
+
+  const getRefundStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'text-yellow-600'
+      case 'approved':
+        return 'text-green-600'
+      case 'rejected':
+        return 'text-red-600'
+      case 'processed':
+        return 'text-blue-600'
+      default:
+        return 'text-muted-foreground'
+    }
+  }
+
+  // Calculate seller earnings for this order
+  const calculateSellerEarnings = () => {
+    if (!order || !isSeller || !marketplaceSettings) return null
+
+    // Filter items that belong to this seller
+    const sellerItems = order.items.filter((item: any) => {
+      const product = item.productId as any
+      const productData = typeof product === 'object' ? product : null
+      return productData?.sellerId && productData.sellerId.toString() === user?._id
+    })
+
+    if (sellerItems.length === 0) return null
+
+    // Calculate seller's revenue from this order
+    const sellerRevenue = sellerItems.reduce((sum: number, item: any) => {
+      return sum + (item.price * item.quantity)
+    }, 0)
+
+    const commissionRate = marketplaceSettings.commissionRate
+    const commission = sellerRevenue * commissionRate
+    const netEarnings = sellerRevenue - commission
+
+    return {
+      sellerRevenue,
+      commission,
+      netEarnings,
+      commissionRatePercent: marketplaceSettings.commissionRatePercent,
+      itemCount: sellerItems.length
+    }
+  }
+
+  const sellerEarnings = calculateSellerEarnings()
 
   if (loading) {
     return (
@@ -258,6 +381,39 @@ export default function OrderDetail() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Seller Earnings Breakdown - Only show for sellers viewing their own orders */}
+          {sellerEarnings && (
+            <Card className="border-green-200 bg-green-50/50">
+              <CardHeader>
+                <CardTitle className="text-green-700">Your Earnings Breakdown</CardTitle>
+                <CardDescription>Invoice details for this order</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Your Products Revenue</span>
+                    <span className="font-medium">${sellerEarnings.sellerRevenue.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      Marketplace Commission ({sellerEarnings.commissionRatePercent}%)
+                    </span>
+                    <span className="font-medium text-orange-600">-${sellerEarnings.commission.toFixed(2)}</span>
+                  </div>
+                  <div className="border-t pt-2 mt-2">
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Your Net Earnings</span>
+                      <span className="font-bold text-green-600 text-lg">${sellerEarnings.netEarnings.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Based on {sellerEarnings.itemCount} {sellerEarnings.itemCount === 1 ? 'item' : 'items'} from your products in this order
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Order Summary */}
@@ -463,6 +619,23 @@ export default function OrderDetail() {
                   <span>Total</span>
                   <span>${order.totalAmount.toFixed(2)}</span>
                 </div>
+                {sellerEarnings && (
+                  <div className="border-t pt-3 mt-3 space-y-2 bg-muted/30 p-3 rounded-md">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Seller Earnings (Your Products Only)</p>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Your Revenue</span>
+                      <span className="font-medium">${sellerEarnings.sellerRevenue.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Commission ({sellerEarnings.commissionRatePercent}%)</span>
+                      <span className="font-medium text-orange-600">-${sellerEarnings.commission.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-2 mt-2">
+                      <span>You Receive</span>
+                      <span className="text-green-600">${sellerEarnings.netEarnings.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {canCancelOrder && (
@@ -476,6 +649,49 @@ export default function OrderDetail() {
                     <XCircle className="h-4 w-4 mr-2" />
                     Cancel Order
                   </Button>
+                </div>
+              )}
+
+              {canRequestRefund && (
+                <div className="border-t pt-4">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setRefundDialogOpen(true)}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Request Refund
+                  </Button>
+                </div>
+              )}
+
+              {refundRequest && (
+                <div className="border-t pt-4 space-y-2">
+                  <p className="text-sm font-medium">Refund Request Status</p>
+                  <div className="p-3 bg-muted rounded-md space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Status:</span>
+                      <span className={`text-sm font-medium capitalize ${getRefundStatusColor(refundRequest.status)}`}>
+                        {refundRequest.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Reason:</span>
+                      <span className="text-sm capitalize">{refundRequest.reason.replace('_', ' ')}</span>
+                    </div>
+                    {refundRequest.refundAmount && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">Amount:</span>
+                        <span className="text-sm font-medium">${refundRequest.refundAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {refundRequest.adminNotes && (
+                      <div className="mt-2 pt-2 border-t">
+                        <p className="text-xs text-muted-foreground mb-1">Admin Notes:</p>
+                        <p className="text-sm">{refundRequest.adminNotes}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -526,6 +742,59 @@ export default function OrderDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Refund</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for your refund request. Our team will review it and get back to you.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="refund-reason">Reason *</Label>
+              <Select value={refundReason} onValueChange={setRefundReason}>
+                <SelectTrigger id="refund-reason">
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="defective">Defective Product</SelectItem>
+                  <SelectItem value="wrong_item">Wrong Item Received</SelectItem>
+                  <SelectItem value="not_as_described">Not as Described</SelectItem>
+                  <SelectItem value="damaged">Damaged During Shipping</SelectItem>
+                  <SelectItem value="late_delivery">Late Delivery</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="refund-description">Additional Details (Optional)</Label>
+              <Textarea
+                id="refund-description"
+                value={refundDescription}
+                onChange={(e) => setRefundDescription(e.target.value)}
+                placeholder="Please provide any additional information about your refund request..."
+                rows={4}
+              />
+            </div>
+            {order && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground mb-1">Refund Amount</p>
+                <p className="text-lg font-bold">${order.totalAmount.toFixed(2)}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundDialogOpen(false)} disabled={submittingRefund}>
+              Cancel
+            </Button>
+            <Button onClick={handleRefundRequest} disabled={!refundReason || submittingRefund}>
+              {submittingRefund ? 'Submitting...' : 'Submit Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

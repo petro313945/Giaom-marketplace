@@ -24,17 +24,39 @@ export interface EarningsSummary {
   };
 }
 
+export interface PayoutOrderItem {
+  productId: string;
+  title: string;
+  imageUrl?: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+}
+
+export interface PayoutOrder {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  status: string;
+  items: PayoutOrderItem[];
+  sellerRevenue: number;
+  averageRating: number | null;
+}
+
 export interface Payout {
   id: string;
   amount: number;
   commission: number;
   netAmount: number;
+  commissionRate?: number;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   payoutMethod?: string;
   requestedAt: string;
   processedAt?: string;
   failureReason?: string;
   orderCount: number;
+  orders?: PayoutOrder[];
+  averageRating?: number | null;
   createdAt: string;
   updatedAt: string;
 }

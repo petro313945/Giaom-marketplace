@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, User, Menu, Heart, LogOut, Package, MapPin, ShoppingBag, TrendingUp, DollarSign, CheckCircle2, Store, ShoppingCart, Star, AlertCircle, Wallet, Tags, Home, Bell } from 'lucide-react'
+import { Search, User, Menu, Heart, LogOut, Package, MapPin, ShoppingBag, TrendingUp, DollarSign, CheckCircle2, Store, ShoppingCart, Star, AlertCircle, Wallet, Tags, Home, Bell, RotateCcw, BarChart3 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
@@ -251,6 +251,12 @@ export default function Header() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuItem asChild>
+                        <Link to="/profile?tab=statistics" className="flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          Statistics
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
                         <Link to="/profile?tab=bought-product" className="flex items-center gap-2">
                           <ShoppingBag className="h-4 w-4" />
                           Purchased Products
@@ -304,6 +310,12 @@ export default function Header() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=statistics" className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4" />
+                        Statistics
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
                       <Link to="/profile?tab=sold-products" className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4" />
                         Sold Products
@@ -340,7 +352,7 @@ export default function Header() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link to="/profile" className="flex items-center gap-2">
+                      <Link to="/profile?tab=profile" className="flex items-center gap-2">
                         <User className="h-4 w-4" />
                         Profile
                       </Link>
@@ -361,6 +373,12 @@ export default function Header() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=statistics" className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4" />
+                        Statistics
+                      </Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link to="/profile?tab=sellers" className="flex items-center gap-2">
                         <Store className="h-4 w-4" />
@@ -413,6 +431,12 @@ export default function Header() {
                       <Link to="/profile?tab=reports" className="flex items-center gap-2">
                         <AlertCircle className="h-4 w-4" />
                         Reports
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile?tab=refunds" className="flex items-center gap-2">
+                        <RotateCcw className="h-4 w-4" />
+                        Refunds
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

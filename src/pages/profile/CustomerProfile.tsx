@@ -18,8 +18,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, Heart, MapPin, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart, ShoppingBag } from 'lucide-react'
+import { Package, Heart, MapPin, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart, ShoppingBag, DollarSign, TrendingUp, BarChart3, RotateCcw, StoreIcon } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import * as orderService from '../../services/orderService'
 import * as userService from '../../services/userService'
@@ -58,7 +65,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
   const [searchParams, setSearchParams] = useSearchParams()
   
   // Valid tab values
-  const validTabs = ['orders', 'wishlist', 'addresses', 'bought-product', 'profile']
+  const validTabs = ['statistics', 'orders', 'wishlist', 'addresses', 'bought-product', 'profile']
   
   // Get active tab from URL or use default
   const urlTab = searchParams.get('tab')
@@ -66,7 +73,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
     ? urlTab 
     : (defaultTab && validTabs.includes(defaultTab)) 
       ? defaultTab 
-      : 'bought-product'
+      : 'statistics'
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, limit: 10 })
   const [ordersSortBy, setOrdersSortBy] = useState<string>('date')
@@ -469,15 +476,33 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
   return (
     <div className="container py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">
-          {user?.fullName || 'User'} Account <span className="text-sm text-muted-foreground font-normal">{user?.email || ''}</span>
-        </h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold">
+            {user?.fullName || 'User'} Account <span className="text-sm text-muted-foreground font-normal">{user?.email || ''}</span>
+          </h1>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+            >
+              <Link to="/">
+                <StoreIcon className="h-4 w-4 mr-2" />
+                Marketplace
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => {
         setSearchParams({ tab: value })
       }} className="space-y-6">
         <TabsList>
+          <TabsTrigger value="statistics" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Statistics
+          </TabsTrigger>
           <TabsTrigger value="bought-product" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             Purchased Products
@@ -499,6 +524,168 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
             Profile
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="statistics" className="space-y-4">
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
+                <BarChart3 className="h-6 w-6" />
+                Buyer Statistics
+              </h2>
+              <p className="text-muted-foreground">
+                Overview of your purchase history and key metrics
+              </p>
+            </div>
+            {(() => {
+              const totalSpent = orders
+                .filter(order => order.status !== 'cancelled')
+                .reduce((sum, order) => sum + order.totalAmount, 0)
+              const totalOrders = orders.length
+              const completedOrders = orders.filter(order => order.status === 'delivered').length
+              const cancelledOrders = orders.filter(order => order.status === 'cancelled').length
+              const pendingOrders = orders.filter(order => order.status === 'pending' || order.status === 'processing').length
+              const boughtProducts = getBoughtProducts()
+              const totalProductsPurchased = boughtProducts.reduce((sum, product) => sum + product.totalQuantity, 0)
+              const totalProductsUnique = boughtProducts.length
+              const averageOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0
+              
+              // Calculate refund statistics
+              const refundRequests = orders.filter(order => order.refundRequest).map(order => order.refundRequest!)
+              const totalRefundAmount = refundRequests
+                .filter(refund => refund.status === 'processed' || refund.status === 'approved')
+                .reduce((sum, refund) => sum + (refund.refundAmount || 0), 0)
+              const processedRefunds = refundRequests.filter(refund => refund.status === 'processed').length
+              const approvedRefunds = refundRequests.filter(refund => refund.status === 'approved').length
+              const pendingRefunds = refundRequests.filter(refund => refund.status === 'pending').length
+              const rejectedRefunds = refundRequests.filter(refund => refund.status === 'rejected').length
+              const totalRefundRequests = refundRequests.length
+
+              return (
+                <>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Total Spent
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-primary">${totalSpent.toFixed(2)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">All purchases (before refunds)</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          Total Orders
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{totalOrders}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {completedOrders} completed, {pendingOrders} pending
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <ShoppingBag className="h-4 w-4" />
+                          Items Purchased
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{totalProductsPurchased}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {totalProductsUnique} different products
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4" />
+                          Average Order Value
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">${averageOrderValue.toFixed(2)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Per order average</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Additional Statistics */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium">Order Status</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Completed Orders</span>
+                          <span className="font-bold">{completedOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Pending/Processing</span>
+                          <span className="font-bold">{pendingOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Cancelled Orders</span>
+                          <span className="font-bold">{cancelledOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t pt-2">
+                          <span className="text-sm font-medium">Total Orders</span>
+                          <span className="font-bold">{totalOrders}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <RotateCcw className="h-4 w-4" />
+                          Refund Information
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Total Refunded Amount</span>
+                          <span className="font-bold">${totalRefundAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Processed Refunds</span>
+                          <span className="font-bold">{processedRefunds}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Approved (Pending Processing)</span>
+                          <span className="font-bold">{approvedRefunds}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Pending Requests</span>
+                          <span className="font-bold">{pendingRefunds}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Rejected Requests</span>
+                          <span className="font-bold">{rejectedRefunds}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t pt-2">
+                          <span className="text-sm font-medium">Total Refund Requests</span>
+                          <span className="font-bold">{totalRefundRequests}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </TabsContent>
 
         <TabsContent value="orders" className="space-y-4">
           <Card>
@@ -569,6 +756,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                         <th className="h-10 px-4 text-left font-medium">Status</th>
                         <th className="h-10 px-4 text-left font-medium">Amount</th>
                         <th className="h-10 px-4 text-left font-medium">Items</th>
+                        <th className="h-10 px-4 text-left font-medium">Refund</th>
                         <th className="h-10 px-4 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -598,6 +786,35 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                                 <td className="px-4 py-3 font-medium">${order.totalAmount.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-muted-foreground">
                                   {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {order.paymentStatus === 'refunded' || order.refundRequest ? (
+                                    <div className="flex flex-col gap-1">
+                                      {order.refundRequest && (
+                                        <Badge
+                                          variant={
+                                            order.refundRequest.status === 'processed' ? 'default' :
+                                            order.refundRequest.status === 'approved' ? 'default' :
+                                            order.refundRequest.status === 'pending' ? 'secondary' :
+                                            'destructive'
+                                          }
+                                          className="w-fit"
+                                        >
+                                          {order.refundRequest.status}
+                                        </Badge>
+                                      )}
+                                      {order.refundRequest?.refundAmount && (
+                                        <span className="text-sm font-medium text-green-600">
+                                          ${order.refundRequest.refundAmount.toFixed(2)}
+                                        </span>
+                                      )}
+                                      {order.paymentStatus === 'refunded' && !order.refundRequest && (
+                                        <Badge variant="default" className="w-fit">Refunded</Badge>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <Button
@@ -738,7 +955,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                   {wishlistItems.map((item) => {
                     const product = item.productId as Product
                     const productId = product._id || product.id
-                    const productImage = getImageUrl(product.imageUrl)
+                    const productImage = getFirstImageUrl(product)
                     
                     return (
                       <Card key={item.id} className="overflow-hidden">
@@ -1249,6 +1466,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
         </TabsContent>
 
         <TabsContent value="profile" className="space-y-4">
+
           <Card>
             <CardHeader>
               <CardTitle>Profile Information</CardTitle>
@@ -1317,7 +1535,6 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                     <p className="text-sm font-medium mb-1">Email</p>
                     <p className="text-muted-foreground">{user?.email}</p>
                   </div>
-                  <Button onClick={() => setIsEditingProfile(true)}>Edit Profile</Button>
                 </>
               )}
             </CardContent>

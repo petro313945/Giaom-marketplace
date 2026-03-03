@@ -9,7 +9,7 @@ export default function Footer() {
           <div>
             <h5 className="font-semibold mb-4">Shop</h5>
             <ul className="space-y-2 text-sm">
-              <li>
+              <li className="hidden">
                 <Link to="/gift-cards" className="text-muted-foreground hover:text-foreground">
                   Gift cards
                 </Link>
@@ -19,27 +19,27 @@ export default function Footer() {
                   Giaom Registry
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/sitemap" className="text-muted-foreground hover:text-foreground">
                   Sitemap
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/blog" className="text-muted-foreground hover:text-foreground">
                   Giaom blog
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/uk" className="text-muted-foreground hover:text-foreground">
                   Giaom United Kingdom
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/de" className="text-muted-foreground hover:text-foreground">
                   Giaom Germany
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/ca" className="text-muted-foreground hover:text-foreground">
                   Giaom Canada
                 </Link>
@@ -55,17 +55,17 @@ export default function Footer() {
                   Sell on Giaom
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/teams" className="text-muted-foreground hover:text-foreground">
                   Teams
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/forums" className="text-muted-foreground hover:text-foreground">
                   Forums
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/affiliates" className="text-muted-foreground hover:text-foreground">
                   Affiliates & Creators
                 </Link>
@@ -76,37 +76,37 @@ export default function Footer() {
           <div>
             <h5 className="font-semibold mb-4">About</h5>
             <ul className="space-y-2 text-sm">
-              <li>
+              <li className="hidden">
                 <Link to="/about" className="text-muted-foreground hover:text-foreground">
                   Giaom, Inc.
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/policies" className="text-muted-foreground hover:text-foreground">
                   Policies
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/investors" className="text-muted-foreground hover:text-foreground">
                   Investors
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/careers" className="text-muted-foreground hover:text-foreground">
                   Careers
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/press" className="text-muted-foreground hover:text-foreground">
                   Press
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/impact" className="text-muted-foreground hover:text-foreground">
                   Impact
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/legal" className="text-muted-foreground hover:text-foreground">
                   Legal imprint
                 </Link>
@@ -117,18 +117,18 @@ export default function Footer() {
           <div>
             <h5 className="font-semibold mb-4">Help</h5>
             <ul className="space-y-2 text-sm mb-6">
-              <li>
+              <li className="hidden">
                 <Link to="/help" className="text-muted-foreground hover:text-foreground">
                   Help Center
                 </Link>
               </li>
-              <li>
+              <li className="hidden">
                 <Link to="/privacy-settings" className="text-muted-foreground hover:text-foreground">
                   Privacy settings
                 </Link>
               </li>
             </ul>
-            <div className="flex gap-4">
+            <div className="flex gap-4 hidden">
               <Link to="#" className="text-muted-foreground hover:text-foreground">
                 <Instagram className="h-5 w-5" />
               </Link>

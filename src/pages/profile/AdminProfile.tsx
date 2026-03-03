@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import {
@@ -17,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Users, ShoppingBag, Store, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, Plus, BarChart3, Key, Tags, Home } from 'lucide-react'
+import { Users, ShoppingBag, Store, StoreIcon, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, BarChart3, Key, Tags, Home, RefreshCw, Database, Download } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -27,6 +28,8 @@ import * as reportService from '../../services/reportService'
 import * as payoutService from '../../services/payoutService'
 import * as categoryService from '../../services/categoryService'
 import * as homeSettingsService from '../../services/homeSettingsService'
+import * as marketplaceSettingsService from '../../services/marketplaceSettingsService'
+import * as backupService from '../../services/backupService'
 import RatingDisplay from '../../components/RatingDisplay'
 import { getFirstImageUrl } from '../../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
@@ -39,13 +42,13 @@ export default function AdminProfile() {
   const [searchParams, setSearchParams] = useSearchParams()
   
   // Valid tab values
-  const validTabs = ['sellers', 'buyers', 'products', 'orders', 'reviews', 'reports', 'payouts', 'categories', 'home']
+  const validTabs = ['statistics', 'sellers', 'buyers', 'products', 'orders', 'reviews', 'reports', 'payouts', 'categories', 'home', 'refunds']
   
   // Get active tab from URL or use default
   const urlTab = searchParams.get('tab')
   const activeTab = (urlTab && validTabs.includes(urlTab)) 
     ? urlTab 
-    : 'sellers'
+    : 'statistics'
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [allSellers, setAllSellers] = useState<any[]>([])
   const [sellersPagination, setSellersPagination] = useState({ page: 1, perPage: 10 })
@@ -97,6 +100,11 @@ export default function AdminProfile() {
   const [selectedPayout, setSelectedPayout] = useState<payoutService.Payout | null>(null)
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
   const [payoutStatusUpdate, setPayoutStatusUpdate] = useState<{ status: string; failureReason?: string }>({ status: '' })
+  const [payoutOrderDetails, setPayoutOrderDetails] = useState<any[]>([])
+  const [payoutOrderDetailsLoading, setPayoutOrderDetailsLoading] = useState(false)
+  const [expandedPayoutRows, setExpandedPayoutRows] = useState<Set<string>>(new Set())
+  const [payoutOrdersMap, setPayoutOrdersMap] = useState<{ [key: string]: any[] }>({})
+  const [payoutOrdersLoadingMap, setPayoutOrdersLoadingMap] = useState<{ [key: string]: boolean }>({})
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null)
   const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false)
@@ -124,7 +132,6 @@ export default function AdminProfile() {
   })
   const [updatingBuyer, setUpdatingBuyer] = useState(false)
   const [resettingPasswordUserId, setResettingPasswordUserId] = useState<string | null>(null)
-  const [statisticsDialogOpen, setStatisticsDialogOpen] = useState(false)
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -162,6 +169,24 @@ export default function AdminProfile() {
   const [updatingHomeSettings, setUpdatingHomeSettings] = useState(false)
   const [selectedFeaturedCategories, setSelectedFeaturedCategories] = useState<string[]>([])
   const [selectedFeaturedProducts, setSelectedFeaturedProducts] = useState<string[]>([])
+  const [marketplaceSettings, setMarketplaceSettings] = useState<marketplaceSettingsService.MarketplaceSettingsAdmin | null>(null)
+  const [marketplaceSettingsLoading, setMarketplaceSettingsLoading] = useState(false)
+  const [updatingMarketplaceSettings, setUpdatingMarketplaceSettings] = useState(false)
+  const [commissionRateInput, setCommissionRateInput] = useState<string>('')
+  const [allRefundRequests, setAllRefundRequests] = useState<orderService.RefundRequest[]>([])
+  const [refundRequestsLoading, setRefundRequestsLoading] = useState(false)
+  const [refundStatusFilter, setRefundStatusFilter] = useState<string>('all')
+  const [selectedRefundRequest, setSelectedRefundRequest] = useState<orderService.RefundRequest | null>(null)
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false)
+  const [refundStatusUpdate, setRefundStatusUpdate] = useState<{ status: 'pending' | 'approved' | 'rejected'; adminNotes?: string }>({ status: 'pending' })
+  const [updatingRefundStatus, setUpdatingRefundStatus] = useState(false)
+  const [processingRefundId, setProcessingRefundId] = useState<string | null>(null)
+  const [backups, setBackups] = useState<backupService.Backup[]>([])
+  const [backupsLoading, setBackupsLoading] = useState(false)
+  const [creatingBackup, setCreatingBackup] = useState(false)
+  const [deletingBackupFilename, setDeletingBackupFilename] = useState<string | null>(null)
+  const [selectedReviewDetail, setSelectedReviewDetail] = useState<any | null>(null)
+  const [reviewDetailDialogOpen, setReviewDetailDialogOpen] = useState(false)
 
   const fetchProducts = async (page = 1, limit: number = productsLimit) => {
     const response = await productService.getAllProducts({ page, limit })
@@ -449,6 +474,142 @@ export default function AdminProfile() {
     }
   }
 
+  const fetchMarketplaceSettings = async () => {
+    setMarketplaceSettingsLoading(true)
+    try {
+      const response = await marketplaceSettingsService.getMarketplaceSettingsAdmin()
+      setMarketplaceSettings(response)
+      setCommissionRateInput(response.commissionRatePercent.toString())
+    } catch (error) {
+      console.error('Failed to fetch marketplace settings:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch marketplace settings',
+        variant: 'destructive',
+      })
+    } finally {
+      setMarketplaceSettingsLoading(false)
+    }
+  }
+
+  const fetchRefundRequests = async () => {
+    setRefundRequestsLoading(true)
+    try {
+      const response = await orderService.getRefundRequests()
+      setAllRefundRequests(response.refundRequests)
+    } catch (error) {
+      console.error('Failed to fetch refund requests:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch refund requests',
+        variant: 'destructive',
+      })
+    } finally {
+      setRefundRequestsLoading(false)
+    }
+  }
+
+  const fetchBackups = async () => {
+    setBackupsLoading(true)
+    try {
+      const response = await backupService.listBackups()
+      setBackups(response.backups)
+    } catch (error) {
+      console.error('Failed to fetch backups:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch backups',
+        variant: 'destructive',
+      })
+    } finally {
+      setBackupsLoading(false)
+    }
+  }
+
+  const handleUpdateRefundStatus = async () => {
+    if (!selectedRefundRequest) return
+
+    setUpdatingRefundStatus(true)
+    try {
+      await orderService.updateRefundRequestStatus(
+        selectedRefundRequest.id,
+        refundStatusUpdate.status,
+        refundStatusUpdate.adminNotes
+      )
+      await fetchRefundRequests()
+      setRefundDialogOpen(false)
+      setSelectedRefundRequest(null)
+      setRefundStatusUpdate({ status: 'pending' })
+      toast({
+        title: 'Success',
+        description: 'Refund request status updated successfully',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || 'Failed to update refund status',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingRefundStatus(false)
+    }
+  }
+
+  const handleProcessRefund = async (refundRequestId: string) => {
+    setProcessingRefundId(refundRequestId)
+    try {
+      await orderService.processRefund(refundRequestId)
+      await fetchRefundRequests()
+      toast({
+        title: 'Success',
+        description: 'Refund processed successfully',
+        variant: 'default',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || 'Failed to process refund',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingRefundId(null)
+    }
+  }
+
+  const handleUpdateMarketplaceSettings = async () => {
+    const ratePercent = parseFloat(commissionRateInput)
+    if (isNaN(ratePercent) || ratePercent < 0 || ratePercent > 100) {
+      toast({
+        title: 'Validation Error',
+        description: 'Commission rate must be between 0 and 100',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setUpdatingMarketplaceSettings(true)
+    try {
+      const rate = ratePercent / 100 // Convert percentage to decimal
+      await marketplaceSettingsService.updateMarketplaceSettings({ commissionRate: rate })
+      await fetchMarketplaceSettings()
+      toast({
+        title: 'Success',
+        description: 'Marketplace settings updated successfully',
+      })
+    } catch (error: any) {
+      console.error('Failed to update marketplace settings:', error)
+      const errorMessage = error?.response?.data?.error || 'Failed to update marketplace settings'
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingMarketplaceSettings(false)
+    }
+  }
+
   const handleUpdateHomeSettings = async () => {
     if (selectedFeaturedCategories.length > 6) {
       toast({
@@ -630,6 +791,18 @@ export default function AdminProfile() {
   }
 
   useEffect(() => {
+    if (activeTab === 'refunds') {
+      fetchRefundRequests()
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab === 'backup') {
+      fetchBackups()
+    }
+  }, [activeTab])
+
+  useEffect(() => {
     if (payoutStatusFilter) {
       // reset to first page when filter changes
       setPayoutsPagination((p) => ({ ...p, page: 1 }))
@@ -642,6 +815,46 @@ export default function AdminProfile() {
   }, [payoutsPagination.page, payoutsPagination.limit, payoutStatusFilter])
 
   useEffect(() => {
+    const fetchPayoutOrderDetails = async () => {
+      if (payoutDialogOpen && selectedPayout) {
+        setPayoutOrderDetailsLoading(true)
+        try {
+          const payoutDetails = await payoutService.getPayoutById(selectedPayout.id)
+          if (payoutDetails.orders && Array.isArray(payoutDetails.orders)) {
+            const processedOrders = payoutDetails.orders.map((order: any) => {
+              const orderId = order._id || order.id || ''
+              const items = order.items || []
+              const sellerRevenue = order.totalAmount || items.reduce((sum: number, item: any) => {
+                return sum + (item.price * item.quantity)
+              }, 0)
+
+              return {
+                id: orderId,
+                orderNumber: orderId.slice(-8),
+                createdAt: order.createdAt,
+                status: order.status,
+                sellerRevenue
+              }
+            })
+            setPayoutOrderDetails(processedOrders)
+          } else {
+            setPayoutOrderDetails([])
+          }
+        } catch (error) {
+          console.error('Error fetching payout order details:', error)
+          setPayoutOrderDetails([])
+        } finally {
+          setPayoutOrderDetailsLoading(false)
+        }
+      } else {
+        setPayoutOrderDetails([])
+      }
+    }
+
+    fetchPayoutOrderDetails()
+  }, [payoutDialogOpen, selectedPayout])
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         const [users, sellers, productStatsData, productsResponse, ordersData] = await Promise.all([
@@ -651,6 +864,7 @@ export default function AdminProfile() {
           productService.getAllProducts({ page: 1, limit: 10 }),
           orderService.getAllOrders(),
         ])
+        await fetchMarketplaceSettings()
         setAllUsers(users)
         setAllSellers(sellers)
         setProductStats(productStatsData)
@@ -1165,20 +1379,27 @@ export default function AdminProfile() {
               )}
             </h1>
           </div>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => setStatisticsDialogOpen(true)}
-            className="gap-2"
-          >
-            <BarChart3 className="h-4 w-4" />
-            View Statistic
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+            >
+              <Link to="/">
+                <StoreIcon className="h-4 w-4 mr-2" />
+                Marketplace
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })} className="space-y-6">
         <TabsList>
+          <TabsTrigger value="statistics" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Statistics
+          </TabsTrigger>
           <TabsTrigger value="sellers" className="gap-2">
             <Store className="h-4 w-4" />
             All Sellers
@@ -1215,7 +1436,411 @@ export default function AdminProfile() {
             <AlertCircle className="h-4 w-4" />
             Reports
           </TabsTrigger>
+          <TabsTrigger value="refunds" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Refunds
+          </TabsTrigger>
+          <TabsTrigger value="backup" className="gap-2" style={{ display: 'none' }}>
+            <Database className="h-4 w-4" />
+            Backup
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="statistics" className="space-y-4">
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
+                <BarChart3 className="h-6 w-6" />
+                Admin Statistics
+              </h2>
+              <p className="text-muted-foreground">
+                Overview of platform performance and key metrics
+              </p>
+            </div>
+            {/* Summary Cards */}
+            <div className="grid md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allUsers.length}</div>
+                  <p className="text-xs text-muted-foreground">All users</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Sellers</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allSellers.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {allSellers.filter((s) => s.status === 'approved').length} active
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Products</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allProducts.length}</div>
+                  <p className="text-xs text-muted-foreground">Total listings</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Orders</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allOrders.length}</div>
+                  <p className="text-xs text-muted-foreground">Total orders</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Finance Overview Section */}
+            {orderStats && (() => {
+              // Calculate refund statistics
+              const processedRefunds = allRefundRequests.filter(r => r.status === 'processed')
+              const approvedRefunds = allRefundRequests.filter(r => r.status === 'approved')
+              const pendingRefunds = allRefundRequests.filter(r => r.status === 'pending')
+              const rejectedRefunds = allRefundRequests.filter(r => r.status === 'rejected')
+              const totalRefundAmount = allRefundRequests
+                .filter(r => r.status === 'processed' || r.status === 'approved')
+                .reduce((sum, r) => sum + (r.refundAmount || 0), 0)
+              
+              // Calculate platform metrics
+              const totalRevenue = orderStats.totalRevenue
+              const totalCommission = payoutStats ? payoutStats.totalCommission : 0
+              const totalPaidToSellers = payoutStats ? payoutStats.totalPaidOut : 0
+              const pendingPayouts = payoutStats ? payoutStats.pendingAmount : 0
+              
+              // Calculate net platform revenue (commission minus commission lost on refunds)
+              const commissionRate = marketplaceSettings 
+                ? marketplaceSettings.commissionRatePercent / 100 
+                : (totalRevenue > 0 ? totalCommission / totalRevenue : 0.1)
+              const commissionLostOnRefunds = totalRefundAmount * commissionRate
+              const netPlatformRevenue = totalCommission - commissionLostOnRefunds
+              
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                      <DollarSign className="h-5 w-5" />
+                      Finance Overview
+                    </CardTitle>
+                    <CardDescription>
+                      Complete platform financial status and earnings breakdown
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Key Finance Metrics */}
+                    <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Total Revenue</p>
+                        <p className="text-xl font-bold">${totalRevenue.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">All orders revenue</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Refunded Amount</p>
+                        <p className="text-xl font-bold">${totalRefundAmount.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">{allRefundRequests.length} refund{allRefundRequests.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Platform Commission</p>
+                        <p className="text-xl font-bold">${totalCommission.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">Total collected</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Net Platform Revenue</p>
+                        <p className="text-xl font-bold">${netPlatformRevenue.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">After refunds impact</p>
+                      </div>
+                      {payoutStats && (
+                        <>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Total Paid to Sellers</p>
+                            <p className="text-xl font-bold">${totalPaidToSellers.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">Completed payouts</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Pending Payouts</p>
+                            <p className="text-xl font-bold">${pendingPayouts.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">In process</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Detailed Breakdown */}
+                    <div className="border-t pt-4 space-y-4">
+                      <h4 className="text-sm font-semibold">Detailed Breakdown</h4>
+                      <div className="grid md:grid-cols-2 gap-6">
+                        {/* Revenue & Commission Details */}
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Revenue & Commission</h5>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Total Revenue</span>
+                              <span className="font-medium">${totalRevenue.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Total Refunded</span>
+                              <span className="font-medium">-${totalRefundAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t pt-2">
+                              <span className="text-sm font-medium">Revenue After Refunds</span>
+                              <span className="font-bold">${(totalRevenue - totalRefundAmount).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Platform Commission</span>
+                              <span className="font-medium">${totalCommission.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t pt-2">
+                              <span className="text-sm font-semibold">Net Platform Revenue</span>
+                              <span className="font-bold">${netPlatformRevenue.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Payout Details */}
+                        {payoutStats && (
+                          <div className="space-y-3">
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Seller Payouts</h5>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Total Paid to Sellers</span>
+                                <span className="font-medium">${totalPaidToSellers.toFixed(2)}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground pl-2">
+                                {payoutStats.completed} completed payout{payoutStats.completed !== 1 ? 's' : ''}
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Pending Payouts</span>
+                                <span className="font-medium">${pendingPayouts.toFixed(2)}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground pl-2">
+                                {payoutStats.pending + payoutStats.processing} payout{(payoutStats.pending + payoutStats.processing) !== 1 ? 's' : ''} in process
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Total Payout Amount</span>
+                                <span className="font-medium">${payoutStats.totalAmount.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-t pt-2">
+                                <span className="text-sm font-medium">Total Payouts</span>
+                                <span className="font-bold">{payoutStats.total}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Refund Details */}
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Refund Details</h5>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Total Refunded</span>
+                              <span className="font-medium">${totalRefundAmount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Processed Refunds</span>
+                              <span className="font-medium">{processedRefunds.length}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Approved (Processing)</span>
+                              <span className="font-medium">{approvedRefunds.length}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Pending Requests</span>
+                              <span className="font-medium">{pendingRefunds.length}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Rejected Requests</span>
+                              <span className="font-medium">{rejectedRefunds.length}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t pt-2">
+                              <span className="text-sm font-medium">Total Refund Requests</span>
+                              <span className="font-bold">{allRefundRequests.length}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Order Statistics */}
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Order Statistics</h5>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Total Orders</span>
+                              <span className="font-medium">{orderStats.totalOrders}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Delivered Orders</span>
+                              <span className="font-medium">{orderStats.deliveredOrders}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Pending Orders</span>
+                              <span className="font-medium">{orderStats.pendingOrders}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-sm text-muted-foreground">Cancelled Orders</span>
+                              <span className="font-medium">
+                                {allOrders.filter(o => o.status === 'cancelled').length}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
+
+            {/* Product Statistics */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Product Statistics</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Total Products</span>
+                  <span className="font-bold">{productStats.total}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Pending Approval</span>
+                  <span className="font-bold">{productStats.pending}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Approved</span>
+                  <span className="font-bold">
+                    {allProducts.filter((p) => p.status === 'approved').length}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Rejected</span>
+                  <span className="font-bold">
+                    {allProducts.filter((p) => p.status === 'rejected').length}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* User Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">User Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">
+                      {allUsers.filter((u) => u.role === 'customer').length}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Buyers</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">
+                      {allUsers.filter((u) => u.role === 'seller').length}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Sellers</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">
+                      {allUsers.filter((u) => u.role === 'admin').length}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Admins</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Seller Status Breakdown */}
+            {allSellers.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Seller Status Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">
+                        {allSellers.filter((s) => s.status === 'approved').length}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Approved</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">
+                        {allSellers.filter((s) => s.status === 'pending').length}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Pending</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">
+                        {allSellers.filter((s) => s.status === 'rejected').length}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Rejected</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Order Status Breakdown */}
+            {allOrders.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Order Status Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => {
+                      const count = allOrders.filter((o) => o.status === status).length
+                      if (count === 0) return null
+                      return (
+                        <div key={status} className="text-center">
+                          <div className="text-2xl font-bold">{count}</div>
+                          <p className="text-xs text-muted-foreground capitalize">{status}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Reviews and Reports */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Reviews</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{reviewsPagination.total}</div>
+                  <p className="text-xs text-muted-foreground">Total reviews</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium">Reports</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allReports.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {pendingReportsCount > 0 && (
+                      <span>{pendingReportsCount} pending</span>
+                    )}
+                    {pendingReportsCount === 0 && 'All resolved'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
 
         <TabsContent value="sellers" className="space-y-4">
           <Card>
@@ -2046,6 +2671,7 @@ export default function AdminProfile() {
                         <th className="px-4 py-3 text-left font-medium">Amount</th>
                         <th className="px-4 py-3 text-left font-medium">Items</th>
                         <th className="px-4 py-3 text-left font-medium">Customer</th>
+                        <th className="px-4 py-3 text-left font-medium">Refund</th>
                         <th className="px-4 py-3 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -2076,6 +2702,35 @@ export default function AdminProfile() {
                               {order.items?.length ?? 0} {order.items?.length === 1 ? 'item' : 'items'}
                             </td>
                             <td className="px-4 py-3 text-muted-foreground">{userEmail}</td>
+                            <td className="px-4 py-3">
+                              {order.paymentStatus === 'refunded' || order.refundRequest ? (
+                                <div className="flex flex-col gap-1">
+                                  {order.refundRequest && (
+                                    <Badge
+                                      variant={
+                                        order.refundRequest.status === 'processed' ? 'default' :
+                                        order.refundRequest.status === 'approved' ? 'default' :
+                                        order.refundRequest.status === 'pending' ? 'secondary' :
+                                        'destructive'
+                                      }
+                                      className="w-fit"
+                                    >
+                                      {order.refundRequest.status}
+                                    </Badge>
+                                  )}
+                                  {order.refundRequest?.refundAmount && (
+                                    <span className="text-sm font-medium text-green-600">
+                                      ${order.refundRequest.refundAmount.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {order.paymentStatus === 'refunded' && !order.refundRequest && (
+                                    <Badge variant="default" className="w-fit">Refunded</Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-right">
                               <Button
                                 variant="default"
@@ -2294,6 +2949,17 @@ export default function AdminProfile() {
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex gap-2 justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedReviewDetail(review)
+                                    setReviewDetailDialogOpen(true)
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  View Detail
+                                </Button>
                                 {review.status !== 'approved' && (
                                   <Button
                                     size="sm"
@@ -2469,6 +3135,90 @@ export default function AdminProfile() {
               )}
             </CardContent>
           </Card>
+          
+          {/* Review Detail Dialog */}
+          <Dialog open={reviewDetailDialogOpen} onOpenChange={setReviewDetailDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Review Details</DialogTitle>
+                <DialogDescription>Complete information about this review</DialogDescription>
+              </DialogHeader>
+              {selectedReviewDetail && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Product</Label>
+                      <p className="mt-1 font-medium">
+                        {typeof selectedReviewDetail.productId === 'object' && selectedReviewDetail.productId !== null
+                          ? (selectedReviewDetail.productId as any).title || 'N/A'
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                      <div className="mt-1">
+                        <Badge
+                          variant={
+                            selectedReviewDetail.status === 'approved'
+                              ? 'default'
+                              : selectedReviewDetail.status === 'rejected'
+                              ? 'destructive'
+                              : 'secondary'
+                          }
+                        >
+                          {selectedReviewDetail.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Customer Name</Label>
+                      <p className="mt-1">
+                        {typeof selectedReviewDetail.userId === 'object' && selectedReviewDetail.userId !== null
+                          ? (selectedReviewDetail.userId as any).fullName || (selectedReviewDetail.userId as any).email || 'Anonymous'
+                          : 'Anonymous'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Customer Email</Label>
+                      <p className="mt-1">
+                        {typeof selectedReviewDetail.userId === 'object' && selectedReviewDetail.userId !== null
+                          ? (selectedReviewDetail.userId as any).email || 'N/A'
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Rating</Label>
+                    <div className="mt-1">
+                      <RatingDisplay rating={selectedReviewDetail.rating} size="md" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Comment</Label>
+                    <p className="mt-1 text-sm whitespace-pre-wrap">
+                      {selectedReviewDetail.comment || 'No comment provided'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Created At</Label>
+                      <p className="mt-1 text-sm">
+                        {new Date(selectedReviewDetail.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Updated At</Label>
+                      <p className="mt-1 text-sm">
+                        {new Date(selectedReviewDetail.updatedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
@@ -2988,7 +3738,327 @@ export default function AdminProfile() {
           </Dialog>
         </TabsContent>
 
+        <TabsContent value="refunds" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Refund Requests</CardTitle>
+                  <CardDescription>View and manage all refund requests from customers</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={refundStatusFilter}
+                    onValueChange={(value) => {
+                      setRefundStatusFilter(value)
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="processed">Processed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchRefundRequests}
+                    disabled={refundRequestsLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${refundRequestsLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {refundRequestsLoading ? (
+                <p className="text-muted-foreground">Loading refund requests...</p>
+              ) : allRefundRequests.length === 0 ? (
+                <p className="text-muted-foreground">No refund requests found</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-3 text-left font-medium">Order ID</th>
+                        <th className="px-4 py-3 text-left font-medium">Customer</th>
+                        <th className="px-4 py-3 text-left font-medium">Reason</th>
+                        <th className="px-4 py-3 text-left font-medium">Amount</th>
+                        <th className="px-4 py-3 text-left font-medium">Status</th>
+                        <th className="px-4 py-3 text-left font-medium">Requested</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allRefundRequests
+                        .filter((req) => refundStatusFilter === 'all' || req.status === refundStatusFilter)
+                        .map((refundRequest) => {
+                          const order = refundRequest.orderId as any
+                          const orderId = typeof order === 'object' ? (order?.id || order?._id) : order
+                          const userId = refundRequest.userId as any
+                          const customerName = typeof userId === 'object' 
+                            ? (userId?.fullName || userId?.email || 'N/A')
+                            : refundRequest.guestEmail || 'Guest'
+                          const customerEmail = typeof userId === 'object' 
+                            ? userId?.email 
+                            : refundRequest.guestEmail || 'N/A'
+                          const statusColor = 
+                            refundRequest.status === 'pending' ? 'text-yellow-600' :
+                            refundRequest.status === 'approved' ? 'text-green-600' :
+                            refundRequest.status === 'rejected' ? 'text-red-600' :
+                            'text-blue-600'
+
+                          return (
+                            <tr key={refundRequest.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                              <td className="px-4 py-3">
+                                <Button
+                                  variant="link"
+                                  className="h-auto p-0 font-mono text-xs"
+                                  onClick={() => navigate(`/order/${orderId}`)}
+                                >
+                                  {String(orderId).slice(-8)}
+                                </Button>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div>
+                                  <p className="font-medium">{customerName}</p>
+                                  <p className="text-xs text-muted-foreground">{customerEmail}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div>
+                                  <p className="capitalize">{refundRequest.reason.replace('_', ' ')}</p>
+                                  {refundRequest.description && (
+                                    <p className="text-xs text-muted-foreground truncate max-w-[200px]" title={refundRequest.description}>
+                                      {refundRequest.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 font-medium">
+                                ${refundRequest.refundAmount?.toFixed(2) || '0.00'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <Badge 
+                                  variant={
+                                    refundRequest.status === 'pending' ? 'secondary' :
+                                    refundRequest.status === 'approved' ? 'default' :
+                                    refundRequest.status === 'rejected' ? 'destructive' :
+                                    'outline'
+                                  }
+                                  className="capitalize"
+                                >
+                                  {refundRequest.status}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground">
+                                {new Date(refundRequest.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedRefundRequest(refundRequest)
+                                      setRefundStatusUpdate({ 
+                                        status: refundRequest.status as 'pending' | 'approved' | 'rejected',
+                                        adminNotes: refundRequest.adminNotes || ''
+                                      })
+                                      setRefundDialogOpen(true)
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    View/Update
+                                  </Button>
+                                  {refundRequest.status === 'approved' && (
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      onClick={() => handleProcessRefund(refundRequest.id)}
+                                      disabled={processingRefundId === refundRequest.id}
+                                    >
+                                      {processingRefundId === refundRequest.id ? (
+                                        <>
+                                          <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                                          Processing...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <DollarSign className="h-4 w-4 mr-1" />
+                                          Process Refund
+                                        </>
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Refund Status Update Dialog */}
+          <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Refund Request Details</DialogTitle>
+                <DialogDescription>
+                  Review and update refund request status
+                </DialogDescription>
+              </DialogHeader>
+              {selectedRefundRequest && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium mb-1">Order ID</p>
+                      <p className="text-sm text-muted-foreground font-mono">
+                        {(selectedRefundRequest.orderId as any)?.id || (selectedRefundRequest.orderId as any)?._id || selectedRefundRequest.orderId}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1">Refund Amount</p>
+                      <p className="text-sm font-bold">${selectedRefundRequest.refundAmount?.toFixed(2) || '0.00'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1">Customer</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedRefundRequest.userId && typeof selectedRefundRequest.userId === 'object' 
+                          ? `${(selectedRefundRequest.userId as any)?.fullName || 'N/A'} (${(selectedRefundRequest.userId as any)?.email || 'N/A'})`
+                          : selectedRefundRequest.guestEmail || 'Guest'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1">Requested Date</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(selectedRefundRequest.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-sm font-medium mb-1">Reason</p>
+                      <p className="text-sm text-muted-foreground capitalize">
+                        {selectedRefundRequest.reason.replace('_', ' ')}
+                      </p>
+                    </div>
+                    {selectedRefundRequest.description && (
+                      <div className="col-span-2">
+                        <p className="text-sm font-medium mb-1">Description</p>
+                        <p className="text-sm text-muted-foreground">{selectedRefundRequest.description}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t pt-4 space-y-4">
+                    <div>
+                      <Label htmlFor="refund-status">Status</Label>
+                      <Select
+                        value={refundStatusUpdate.status}
+                        onValueChange={(value) => setRefundStatusUpdate({ ...refundStatusUpdate, status: value as 'pending' | 'approved' | 'rejected' })}
+                      >
+                        <SelectTrigger id="refund-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="admin-notes">Admin Notes (Optional)</Label>
+                      <Textarea
+                        id="admin-notes"
+                        value={refundStatusUpdate.adminNotes || ''}
+                        onChange={(e) => setRefundStatusUpdate({ ...refundStatusUpdate, adminNotes: e.target.value })}
+                        placeholder="Add notes about this refund request..."
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setRefundDialogOpen(false)} disabled={updatingRefundStatus}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateRefundStatus} disabled={updatingRefundStatus}>
+                  {updatingRefundStatus ? 'Updating...' : 'Update Status'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
         <TabsContent value="payouts" className="space-y-4">
+          {/* Commission Rate Settings */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Commission Rate Settings</CardTitle>
+                  <CardDescription>Manage the marketplace commission rate applied to seller payouts</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {marketplaceSettingsLoading ? (
+                <p className="text-muted-foreground">Loading settings...</p>
+              ) : marketplaceSettings ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="text-sm font-medium mb-2 block">
+                        Commission Rate (%)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={commissionRateInput}
+                          onChange={(e) => setCommissionRateInput(e.target.value)}
+                          className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          placeholder="10"
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Current rate: {marketplaceSettings.commissionRatePercent}% (sellers receive {100 - marketplaceSettings.commissionRatePercent}% of their sales)
+                      </p>
+                      {marketplaceSettings.updatedAt && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Last updated: {new Date(marketplaceSettings.updatedAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleUpdateMarketplaceSettings}
+                      disabled={updatingMarketplaceSettings || marketplaceSettingsLoading}
+                      className="mt-6"
+                    >
+                      {updatingMarketplaceSettings ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">Failed to load settings</p>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Payouts List */}
           <Card>
             <CardHeader>
@@ -3068,6 +4138,7 @@ export default function AdminProfile() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50">
+                          <th className="h-10 px-4 text-left font-medium w-12"></th>
                           <th className="h-10 px-4 text-left font-medium">Date</th>
                           <th className="h-10 px-4 text-left font-medium">Seller</th>
                           <th className="h-10 px-4 text-left font-medium">Amount</th>
@@ -3082,53 +4153,165 @@ export default function AdminProfile() {
                         {getSortedPayouts().map((payout) => {
                           const seller = (payout as any).sellerId
                           const sellerName = seller?.fullName || seller?.email || 'Unknown'
-                          return (
-                            <tr
-                              key={payout.id}
-                              className="border-b transition-colors hover:bg-muted/50 last:border-0"
-                            >
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {new Date(payout.requestedAt).toLocaleDateString()}
-                              </td>
-                              <td className="px-4 py-3 font-medium">{sellerName}</td>
-                              <td className="px-4 py-3">${payout.amount.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-muted-foreground">
-                                ${payout.commission.toFixed(2)}
-                              </td>
-                              <td className="px-4 py-3 font-medium text-green-600">
-                                ${payout.netAmount.toFixed(2)}
-                              </td>
-                              <td className="px-4 py-3">
-                                <Badge
-                                  variant={
-                                    payout.status === 'completed'
-                                      ? 'default'
-                                      : payout.status === 'failed' || payout.status === 'cancelled'
-                                      ? 'destructive'
-                                      : 'secondary'
+                          const isExpanded = expandedPayoutRows.has(payout.id)
+                          const toggleExpand = () => {
+                            const newExpanded = new Set(expandedPayoutRows)
+                            if (isExpanded) {
+                              newExpanded.delete(payout.id)
+                            } else {
+                              newExpanded.add(payout.id)
+                              // Fetch order details if not already loaded
+                              if (!payoutOrdersMap[payout.id] && !payoutOrdersLoadingMap[payout.id]) {
+                                setPayoutOrdersLoadingMap(prev => ({ ...prev, [payout.id]: true }))
+                                const fetchOrderDetails = async () => {
+                                  try {
+                                    const payoutDetails = await payoutService.getPayoutById(payout.id)
+                                    if (payoutDetails.orders && Array.isArray(payoutDetails.orders)) {
+                                      const processedOrders = payoutDetails.orders.map((order: any) => {
+                                        const orderId = order._id || order.id || ''
+                                        const items = order.items || []
+                                        const sellerRevenue = order.totalAmount || items.reduce((sum: number, item: any) => {
+                                          return sum + (item.price * item.quantity)
+                                        }, 0)
+
+                                        return {
+                                          id: orderId,
+                                          orderNumber: orderId.slice(-8),
+                                          createdAt: order.createdAt,
+                                          status: order.status,
+                                          sellerRevenue
+                                        }
+                                      })
+                                      setPayoutOrdersMap(prev => ({ ...prev, [payout.id]: processedOrders }))
+                                    } else {
+                                      setPayoutOrdersMap(prev => ({ ...prev, [payout.id]: [] }))
+                                    }
+                                  } catch (error) {
+                                    console.error('Error fetching payout order details:', error)
+                                    setPayoutOrdersMap(prev => ({ ...prev, [payout.id]: [] }))
+                                  } finally {
+                                    setPayoutOrdersLoadingMap(prev => ({ ...prev, [payout.id]: false }))
                                   }
-                                >
-                                  {payout.status}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {payout.orderCount} order{payout.orderCount !== 1 ? 's' : ''}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedPayout(payout)
-                                    setPayoutStatusUpdate({ status: payout.status })
-                                    setPayoutDialogOpen(true)
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  Manage
-                                </Button>
-                              </td>
-                            </tr>
+                                }
+                                fetchOrderDetails()
+                              }
+                            }
+                            setExpandedPayoutRows(newExpanded)
+                          }
+
+                          return (
+                            <>
+                              <tr
+                                key={payout.id}
+                                className="border-b transition-colors hover:bg-muted/50 last:border-0 cursor-pointer"
+                                onClick={toggleExpand}
+                              >
+                                <td className="px-4 py-3">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      toggleExpand()
+                                    }}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {new Date(payout.requestedAt).toLocaleDateString()}
+                                </td>
+                                <td className="px-4 py-3 font-medium">{sellerName}</td>
+                                <td className="px-4 py-3">${payout.amount.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  ${payout.commission.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3 font-medium text-green-600">
+                                  ${payout.netAmount.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge
+                                    variant={
+                                      payout.status === 'completed'
+                                        ? 'default'
+                                        : payout.status === 'failed' || payout.status === 'cancelled'
+                                        ? 'destructive'
+                                        : 'secondary'
+                                    }
+                                  >
+                                    {payout.status}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {payout.orderCount} order{payout.orderCount !== 1 ? 's' : ''}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedPayout(payout)
+                                      setPayoutStatusUpdate({ status: payout.status })
+                                      setPayoutDialogOpen(true)
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    Manage
+                                  </Button>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${payout.id}-details`}>
+                                  <td colSpan={9} className="px-4 py-4 bg-muted/30">
+                                    <div className="space-y-4">
+                                      <h4 className="font-semibold text-sm mb-3">Order Details</h4>
+                                      {payoutOrdersLoadingMap[payout.id] ? (
+                                        <div className="text-center py-4">
+                                          <p className="text-sm text-muted-foreground">Loading order details...</p>
+                                        </div>
+                                      ) : payoutOrdersMap[payout.id] && payoutOrdersMap[payout.id].length > 0 ? (
+                                        <div className="space-y-2">
+                                          {payoutOrdersMap[payout.id].map((order) => (
+                                            <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                                              <div className="flex items-center gap-4 flex-1">
+                                                <div>
+                                                  <p className="font-medium">Order #{order.orderNumber}</p>
+                                                </div>
+                                                <div>
+                                                  <p className="text-sm">
+                                                    <span className="text-muted-foreground">Amount: </span>
+                                                    <span className="font-medium">${order.sellerRevenue.toFixed(2)}</span>
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <Button
+                                                onClick={() => navigate(`/order/${order.id}`)}
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-2"
+                                              >
+                                                <Eye className="h-4 w-4" />
+                                                View Order
+                                              </Button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-center py-4">
+                                          <p className="text-sm text-muted-foreground">No order details available</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           )
                         })}
                       </tbody>
@@ -3300,6 +4483,45 @@ export default function AdminProfile() {
                       <p className="text-sm text-red-600">{selectedPayout.failureReason}</p>
                     </div>
                   )}
+                  <div>
+                    <p className="text-sm font-medium mb-3">Order Details</p>
+                    {payoutOrderDetailsLoading ? (
+                      <div className="text-center py-4">
+                        <p className="text-sm text-muted-foreground">Loading order details...</p>
+                      </div>
+                    ) : payoutOrderDetails.length > 0 ? (
+                      <div className="space-y-2">
+                        {payoutOrderDetails.map((order) => (
+                          <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                            <div className="flex items-center gap-4 flex-1">
+                              <div>
+                                <p className="font-medium">Order #{order.orderNumber}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm">
+                                  <span className="text-muted-foreground">Amount: </span>
+                                  <span className="font-medium">${order.sellerRevenue.toFixed(2)}</span>
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              onClick={() => navigate(`/order/${order.id}`)}
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Order
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <p className="text-sm text-muted-foreground">No order details available</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               <DialogFooter>
@@ -3712,6 +4934,163 @@ export default function AdminProfile() {
                   disabled={deletingCategory}
                 >
                   {deletingCategory ? 'Deleting...' : 'Delete'}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </TabsContent>
+
+        <TabsContent value="backup" className="space-y-4" style={{ display: 'none' }}>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Database Backup</CardTitle>
+                  <CardDescription>Create and manage database backups</CardDescription>
+                </div>
+                <Button
+                  onClick={async () => {
+                    try {
+                      setCreatingBackup(true)
+                      const result = await backupService.createBackup()
+                      toast({
+                        title: 'Backup Created',
+                        description: `Backup created successfully: ${result.backup.filename}`,
+                        variant: 'default',
+                      })
+                      fetchBackups()
+                    } catch (error: any) {
+                      toast({
+                        title: 'Backup Failed',
+                        description: error?.response?.data?.error || 'Failed to create backup',
+                        variant: 'destructive',
+                      })
+                    } finally {
+                      setCreatingBackup(false)
+                    }
+                  }}
+                  disabled={creatingBackup}
+                  className="gap-2"
+                >
+                  <Database className="h-4 w-4" />
+                  {creatingBackup ? 'Creating...' : 'Create Backup'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {backupsLoading ? (
+                <p className="text-muted-foreground">Loading backups...</p>
+              ) : backups.length === 0 ? (
+                <p className="text-muted-foreground">No backups found. Create your first backup to get started.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-4 py-3 text-left font-medium">Filename</th>
+                          <th className="px-4 py-3 text-left font-medium">Size</th>
+                          <th className="px-4 py-3 text-left font-medium">Created</th>
+                          <th className="px-4 py-3 text-right font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {backups.map((backup) => (
+                          <tr key={backup.filename} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 font-medium">{backup.filename}</td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {(backup.size / 1024 / 1024).toFixed(2)} MB
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {new Date(backup.createdAt).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      await backupService.downloadBackup(backup.filename)
+                                      toast({
+                                        title: 'Download Started',
+                                        description: 'Backup download has started',
+                                        variant: 'default',
+                                      })
+                                    } catch (error: any) {
+                                      toast({
+                                        title: 'Download Failed',
+                                        description: error?.response?.data?.error || 'Failed to download backup',
+                                        variant: 'destructive',
+                                      })
+                                    }
+                                  }}
+                                  className="gap-2"
+                                >
+                                  <Download className="h-4 w-4" />
+                                  Download
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => {
+                                    setDeletingBackupFilename(backup.filename)
+                                  }}
+                                  disabled={deletingBackupFilename === backup.filename}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Delete
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Delete Backup Dialog */}
+          <AlertDialog 
+            open={deletingBackupFilename !== null} 
+            onOpenChange={(open) => !open && setDeletingBackupFilename(null)}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Backup</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {deletingBackupFilename && `Are you sure you want to delete backup "${deletingBackupFilename}"? This action cannot be undone.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeletingBackupFilename(null)}>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (deletingBackupFilename) {
+                      try {
+                        await backupService.deleteBackup(deletingBackupFilename)
+                        toast({
+                          title: 'Backup Deleted',
+                          description: 'Backup has been deleted successfully',
+                          variant: 'default',
+                        })
+                        setDeletingBackupFilename(null)
+                        fetchBackups()
+                      } catch (error: any) {
+                        toast({
+                          title: 'Delete Failed',
+                          description: error?.response?.data?.error || 'Failed to delete backup',
+                          variant: 'destructive',
+                        })
+                      }
+                    }
+                  }}
+                >
+                  Delete
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -4161,261 +5540,6 @@ export default function AdminProfile() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Statistics Dialog */}
-      <Dialog open={statisticsDialogOpen} onOpenChange={setStatisticsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Admin Statistics
-            </DialogTitle>
-            <DialogDescription>
-              Overview of platform performance and key metrics
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 mt-4">
-            {/* Summary Cards */}
-            <div className="grid md:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{allUsers.length}</div>
-                  <p className="text-xs text-muted-foreground">All users</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Sellers</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{allSellers.length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {allSellers.filter((s) => s.status === 'approved').length} active
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Products</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{allProducts.length}</div>
-                  <p className="text-xs text-muted-foreground">Total listings</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Orders</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{allOrders.length}</div>
-                  <p className="text-xs text-muted-foreground">Total orders</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Revenue and Order Stats */}
-            {orderStats && (
-              <div className="grid md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">Order Statistics</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Revenue</span>
-                      <span className="font-bold">${orderStats.totalRevenue.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Orders</span>
-                      <span className="font-bold">{orderStats.totalOrders}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Pending Orders</span>
-                      <span className="font-bold text-orange-600">{orderStats.pendingOrders}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Delivered Orders</span>
-                      <span className="font-bold text-green-600">{orderStats.deliveredOrders}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">Product Statistics</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Products</span>
-                      <span className="font-bold">{productStats.total}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Pending Approval</span>
-                      <span className="font-bold text-orange-600">{productStats.pending}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Approved</span>
-                      <span className="font-bold text-green-600">
-                        {allProducts.filter((p) => p.status === 'approved').length}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Rejected</span>
-                      <span className="font-bold text-red-600">
-                        {allProducts.filter((p) => p.status === 'rejected').length}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* User Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">User Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {allUsers.filter((u) => u.role === 'customer').length}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Buyers</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {allUsers.filter((u) => u.role === 'seller').length}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Sellers</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {allUsers.filter((u) => u.role === 'admin').length}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Admins</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Seller Status Breakdown */}
-            {allSellers.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Seller Status Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">
-                        {allSellers.filter((s) => s.status === 'approved').length}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Approved</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-orange-600">
-                        {allSellers.filter((s) => s.status === 'pending').length}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Pending</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-red-600">
-                        {allSellers.filter((s) => s.status === 'rejected').length}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Rejected</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Order Status Breakdown */}
-            {allOrders.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Order Status Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => {
-                      const count = allOrders.filter((o) => o.status === status).length
-                      if (count === 0) return null
-                      return (
-                        <div key={status} className="text-center">
-                          <div className="text-2xl font-bold">{count}</div>
-                          <p className="text-xs text-muted-foreground capitalize">{status}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Reviews and Reports */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Reviews</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{reviewsPagination.total}</div>
-                  <p className="text-xs text-muted-foreground">Total reviews</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Reports</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{allReports.length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {pendingReportsCount > 0 && (
-                      <span className="text-orange-600">{pendingReportsCount} pending</span>
-                    )}
-                    {pendingReportsCount === 0 && 'All resolved'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Payout Statistics */}
-            {payoutStats && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Payout Statistics</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Total Payouts</span>
-                    <span className="font-bold">{payoutStats.total}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Pending</span>
-                    <span className="font-bold text-orange-600">{payoutStats.pending}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Completed</span>
-                    <span className="font-bold text-green-600">{payoutStats.completed}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Failed</span>
-                    <span className="font-bold text-red-600">{payoutStats.failed}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

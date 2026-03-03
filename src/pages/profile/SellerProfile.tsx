@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, BarChart3, PieChart, Wallet, Download, CheckCircle2, User, Star, StoreIcon } from 'lucide-react'
+import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, BarChart3, PieChart, Wallet, Download, CheckCircle2, User, Star, StoreIcon, Eye, RotateCcw } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import {
@@ -36,6 +36,7 @@ import * as analyticsService from '../../services/analyticsService'
 import * as payoutService from '../../services/payoutService'
 import * as userService from '../../services/userService'
 import * as reviewService from '../../services/reviewService'
+import * as marketplaceSettingsService from '../../services/marketplaceSettingsService'
 import type { Product } from '../../services/productService'
 import type { Order } from '../../services/orderService'
 import type { Review } from '../../services/reviewService'
@@ -72,13 +73,13 @@ export default function SellerProfile() {
   const [searchParams, setSearchParams] = useSearchParams()
   
   // Valid tab values
-  const validTabs = ['sold-products', 'products', 'orders', 'analytics', 'payments', 'reviews', 'profile']
+  const validTabs = ['statistics', 'sold-products', 'products', 'orders', 'payments', 'analytics', 'reviews', 'profile']
   
   // Get active tab from URL or use default
   const urlTab = searchParams.get('tab')
   const activeTab = (urlTab && validTabs.includes(urlTab)) 
     ? urlTab 
-    : 'sold-products'
+    : 'statistics'
   
   const [sellerProfile, setSellerProfile] = useState<sellerService.SellerProfile | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -98,12 +99,12 @@ export default function SellerProfile() {
   const [payoutPage, setPayoutPage] = useState(1)
   const [requestingPayout, setRequestingPayout] = useState(false)
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
+  const [marketplaceSettings, setMarketplaceSettings] = useState<marketplaceSettingsService.MarketplaceSettings | null>(null)
   const [soldProductsPagination, setSoldProductsPagination] = useState({ page: 1, limit: 10 })
   const [soldProductsSortBy, setSoldProductsSortBy] = useState<string>('revenue')
   const [soldProductsSortOrder, setSoldProductsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [productsSortBy, setProductsSortBy] = useState<string>('createdAt')
   const [productsSortOrder, setProductsSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [statisticsDialogOpen, setStatisticsDialogOpen] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -112,6 +113,15 @@ export default function SellerProfile() {
   const [reviewsSortBy, setReviewsSortBy] = useState<string>('date')
   const [reviewsSortOrder, setReviewsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [payoutOrderDetails, setPayoutOrderDetails] = useState<Order[]>([])
+  const [payoutOrderDetailsLoading, setPayoutOrderDetailsLoading] = useState(false)
+  const [payoutAverageRating, setPayoutAverageRating] = useState<number | null>(null)
+  const [expandedPayoutRows, setExpandedPayoutRows] = useState<Set<string>>(new Set())
+  const [availablePayoutExpanded, setAvailablePayoutExpanded] = useState(false)
+  const [availablePayoutOrderDetails, setAvailablePayoutOrderDetails] = useState<any[]>([])
+  const [availablePayoutLoading, setAvailablePayoutLoading] = useState(false)
+  const [selectedReviewDetail, setSelectedReviewDetail] = useState<Review | null>(null)
+  const [reviewDetailDialogOpen, setReviewDetailDialogOpen] = useState(false)
 
   const {
     register,
@@ -185,13 +195,8 @@ export default function SellerProfile() {
     setProfileError(null)
     
     try {
-      // Update user profile
-      const userResponse = await userService.updateUserProfile({ fullName: data.fullName })
-      updateUser(userResponse.user)
-      
-      // Update seller profile
+      // Update seller profile (only business description can be changed)
       const sellerResponse = await sellerService.updateSellerProfile({
-        businessName: data.businessName,
         businessDescription: data.businessDescription,
       })
       
@@ -250,6 +255,7 @@ export default function SellerProfile() {
       fetchAnalytics(analyticsPeriod)
       fetchEarningsSummary()
       fetchPayoutHistory(payoutPage)
+      fetchMarketplaceSettings()
     }
   }, [analyticsPeriod, user?.role, payoutPage])
 
@@ -265,6 +271,15 @@ export default function SellerProfile() {
       setEarningsSummary(summary)
     } catch (error) {
       console.error('Failed to fetch earnings summary:', error)
+    }
+  }
+
+  const fetchMarketplaceSettings = async () => {
+    try {
+      const settings = await marketplaceSettingsService.getMarketplaceSettings()
+      setMarketplaceSettings(settings)
+    } catch (error) {
+      console.error('Failed to fetch marketplace settings:', error)
     }
   }
 
@@ -303,7 +318,57 @@ export default function SellerProfile() {
       return
     }
 
+    // Fetch order details and calculate ratings
+    setPayoutOrderDetailsLoading(true)
     setPayoutDialogOpen(true)
+    
+    try {
+      // Fetch order details for available orders
+      const orderIds = earningsSummary.available.orderIds || []
+      const orderPromises = orderIds.map(orderId => orderService.getOrderById(orderId))
+      const orderResponses = await Promise.all(orderPromises)
+      const fetchedOrders = orderResponses.map(res => res.order)
+      setPayoutOrderDetails(fetchedOrders)
+
+      // Calculate average rating for products in these orders
+      const productIds = new Set<string>()
+      fetchedOrders.forEach(order => {
+        order.items?.forEach((item: any) => {
+          const productId = typeof item.productId === 'object' && item.productId?._id
+            ? item.productId._id.toString()
+            : (typeof item.productId === 'string' ? item.productId : '')
+          if (productId) {
+            productIds.add(productId)
+          }
+        })
+      })
+
+      // Fetch review stats for all products
+      const ratingPromises = Array.from(productIds).map(async (productId) => {
+        try {
+          const stats = await reviewService.getReviewStats(productId)
+          return stats.averageRating
+        } catch (error) {
+          return null
+        }
+      })
+
+      const ratings = await Promise.all(ratingPromises)
+      const validRatings = ratings.filter((r): r is number => r !== null && !isNaN(r))
+      
+      if (validRatings.length > 0) {
+        const averageRating = validRatings.reduce((sum, rating) => sum + rating, 0) / validRatings.length
+        setPayoutAverageRating(averageRating)
+      } else {
+        setPayoutAverageRating(null)
+      }
+    } catch (error) {
+      console.error('Error fetching payout order details:', error)
+      setPayoutOrderDetails([])
+      setPayoutAverageRating(null)
+    } finally {
+      setPayoutOrderDetailsLoading(false)
+    }
   }
 
   const handlePayoutConfirm = async () => {
@@ -477,9 +542,8 @@ export default function SellerProfile() {
           comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           break
         case 'amount':
-          const aTotal = a.items?.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0) || a.totalAmount
-          const bTotal = b.items?.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0) || b.totalAmount
-          comparison = aTotal - bTotal
+          // Use totalAmount directly since backend now returns correct amount for seller's items
+          comparison = (a.totalAmount || 0) - (b.totalAmount || 0)
           break
         case 'status':
           comparison = a.status.localeCompare(b.status)
@@ -563,6 +627,18 @@ export default function SellerProfile() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {user?.id && (
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+              >
+                <Link to={`/store/${user.id}`}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Visit Store
+                </Link>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -572,15 +648,6 @@ export default function SellerProfile() {
                 <StoreIcon className="h-4 w-4 mr-2" />
                 Marketplace
               </Link>
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setStatisticsDialogOpen(true)}
-              className="gap-2"
-            >
-              <BarChart3 className="h-4 w-4" />
-              View Statistic
             </Button>
           </div>
         </div>
@@ -596,6 +663,10 @@ export default function SellerProfile() {
         setSearchParams({ tab: value })
       }} className="space-y-6">
         <TabsList>
+          <TabsTrigger value="statistics" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Statistics
+          </TabsTrigger>
           <TabsTrigger value="sold-products" className="gap-2">
             <CheckCircle2 className="h-4 w-4" />
             Sold Products
@@ -608,13 +679,13 @@ export default function SellerProfile() {
             <Package className="h-4 w-4" />
             Orders
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Analytics
-          </TabsTrigger>
           <TabsTrigger value="payments" className="gap-2">
             <DollarSign className="h-4 w-4" />
             Payments
+          </TabsTrigger>
+          <TabsTrigger value="analytics" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Analytics
           </TabsTrigger>
           <TabsTrigger value="reviews" className="gap-2">
             <Star className="h-4 w-4" />
@@ -625,6 +696,416 @@ export default function SellerProfile() {
             Profile
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="statistics" className="space-y-4">
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
+                <BarChart3 className="h-6 w-6" />
+                Seller Statistics
+              </h2>
+              <p className="text-muted-foreground">
+                Overview of your store performance and key metrics
+              </p>
+            </div>
+            {(() => {
+              const soldProducts = getSoldProducts()
+              const totalRevenue = soldProducts.reduce((sum, product) => sum + product.totalRevenue, 0)
+              const totalQuantitySold = soldProducts.reduce((sum, product) => sum + product.totalQuantity, 0)
+              const totalOrdersCount = orders.length
+              const completedOrders = orders.filter(order => order.status === 'delivered').length
+              const cancelledOrders = orders.filter(order => order.status === 'cancelled').length
+              const pendingOrders = orders.filter(order => order.status === 'pending' || order.status === 'processing').length
+              const totalCommission = earningsSummary ? earningsSummary.totalEarnings.commission : 0
+              const commissionRate = marketplaceSettings 
+                ? marketplaceSettings.commissionRatePercent 
+                : (earningsSummary && earningsSummary.totalEarnings.amount > 0 
+                  ? Math.round((earningsSummary.totalEarnings.commission / earningsSummary.totalEarnings.amount) * 100)
+                  : 10)
+              const netEarnings = earningsSummary ? earningsSummary.totalEarnings.netAmount : 0
+              
+              // Calculate refund statistics
+              const refundRequests = orders.filter(order => order.refundRequest).map(order => order.refundRequest!)
+              const totalRefundAmount = refundRequests
+                .filter(refund => refund.status === 'processed' || refund.status === 'approved')
+                .reduce((sum, refund) => sum + (refund.refundAmount || 0), 0)
+              const processedRefunds = refundRequests.filter(refund => refund.status === 'processed').length
+              const approvedRefunds = refundRequests.filter(refund => refund.status === 'approved').length
+              const pendingRefunds = refundRequests.filter(refund => refund.status === 'pending').length
+              const rejectedRefunds = refundRequests.filter(refund => refund.status === 'rejected').length
+              const totalRefundRequests = refundRequests.length
+              const averageOrderValue = totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0
+
+              return (
+                <>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Total Revenue
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-primary">${totalRevenue.toFixed(2)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">All-time sales before refunds</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          Total Orders
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{totalOrdersCount}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {completedOrders} completed, {pendingOrders} pending
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <ShoppingBag className="h-4 w-4" />
+                          Items Sold
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{totalQuantitySold}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {soldProducts.length} different products
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4" />
+                          Net Earnings
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">${netEarnings.toFixed(2)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          After {commissionRate}% commission
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Finance Overview Section */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                        <DollarSign className="h-5 w-5" />
+                        Finance Overview
+                      </CardTitle>
+                      <CardDescription>
+                        Complete financial status and earnings breakdown
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Key Finance Metrics */}
+                      <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Total Revenue</p>
+                          <p className="text-xl font-bold">${totalRevenue.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">All sales before deductions</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Refunded Amount</p>
+                          <p className="text-xl font-bold">${totalRefundAmount.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">{totalRefundRequests} refund{totalRefundRequests !== 1 ? 's' : ''}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Platform Fee</p>
+                          <p className="text-xl font-bold">${totalCommission.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">{commissionRate}% commission rate</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Net Earnings</p>
+                          <p className="text-xl font-bold">${netEarnings.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">After fees & refunds</p>
+                        </div>
+                        {earningsSummary && (
+                          <>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Available to Withdraw</p>
+                              <p className="text-xl font-bold">${earningsSummary.available.netAmount.toFixed(2)}</p>
+                              <p className="text-xs text-muted-foreground">Ready for payout</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Pending Withdrawal</p>
+                              <p className="text-xl font-bold">${earningsSummary.pending.amount.toFixed(2)}</p>
+                              <p className="text-xs text-muted-foreground">{earningsSummary.pending.payoutCount} payout{earningsSummary.pending.payoutCount !== 1 ? 's' : ''}</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Detailed Breakdown */}
+                      <div className="border-t pt-4 space-y-4">
+                        <h4 className="text-sm font-semibold">Detailed Breakdown</h4>
+                        <div className="grid md:grid-cols-2 gap-6">
+                          {/* Revenue & Earnings Details */}
+                          <div className="space-y-3">
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Revenue & Earnings</h5>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Gross Revenue</span>
+                                <span className="font-medium">${totalRevenue.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Total Refunded</span>
+                                <span className="font-medium">-${totalRefundAmount.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-t pt-2">
+                                <span className="text-sm font-medium">Revenue After Refunds</span>
+                                <span className="font-bold">${(totalRevenue - totalRefundAmount).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Platform Commission ({commissionRate}%)</span>
+                                <span className="font-medium">-${totalCommission.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-t pt-2">
+                                <span className="text-sm font-semibold">Net Earnings</span>
+                                <span className="font-bold">${netEarnings.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Withdrawal Status Details */}
+                          {earningsSummary && (
+                            <div className="space-y-3">
+                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Withdrawal Status</h5>
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center py-1">
+                                  <span className="text-sm text-muted-foreground">Available for Withdrawal</span>
+                                  <span className="font-medium">${earningsSummary.available.netAmount.toFixed(2)}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground pl-2">
+                                  From {earningsSummary.available.orderCount} order{earningsSummary.available.orderCount !== 1 ? 's' : ''}
+                                </div>
+                                <div className="flex justify-between items-center py-1">
+                                  <span className="text-sm text-muted-foreground">Pending Withdrawal</span>
+                                  <span className="font-medium">${earningsSummary.pending.amount.toFixed(2)}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground pl-2">
+                                  {earningsSummary.pending.payoutCount} payout{earningsSummary.pending.payoutCount !== 1 ? 's' : ''} in process
+                                </div>
+                                <div className="flex justify-between items-center py-1 border-t pt-2">
+                                  <span className="text-sm text-muted-foreground">Total Withdrawn</span>
+                                  <span className="font-medium">${earningsSummary.paidOut.amount.toFixed(2)}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground pl-2">
+                                  {earningsSummary.paidOut.payoutCount} completed payout{earningsSummary.paidOut.payoutCount !== 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Refund Details */}
+                          <div className="space-y-3">
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Refund Details</h5>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Total Refunded</span>
+                                <span className="font-medium">${totalRefundAmount.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Processed Refunds</span>
+                                <span className="font-medium">{processedRefunds}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Approved (Processing)</span>
+                                <span className="font-medium">{approvedRefunds}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Pending Requests</span>
+                                <span className="font-medium">{pendingRefunds}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Rejected Requests</span>
+                                <span className="font-medium">{rejectedRefunds}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1 border-t pt-2">
+                                <span className="text-sm font-medium">Total Refund Requests</span>
+                                <span className="font-bold">{totalRefundRequests}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Commission Details */}
+                          <div className="space-y-3">
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Commission Details</h5>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Commission Rate</span>
+                                <span className="font-medium">{commissionRate}%</span>
+                              </div>
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-sm text-muted-foreground">Total Commission</span>
+                                <span className="font-medium">${totalCommission.toFixed(2)}</span>
+                              </div>
+                              {earningsSummary && (
+                                <>
+                                  <div className="flex justify-between items-center py-1">
+                                    <span className="text-sm text-muted-foreground">Available Commission</span>
+                                    <span className="font-medium">${earningsSummary.available.commission.toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground pl-2">
+                                    From available orders
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Sales Performance */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium">Sales Performance</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Total Items Sold</span>
+                          <span className="font-bold">{totalQuantitySold}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Different Products</span>
+                          <span className="font-bold">{soldProducts.length}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Average Order Value</span>
+                          <span className="font-bold">${averageOrderValue.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Active Product Listings</span>
+                          <span className="font-bold">{productsPagination.total}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium">Order Status</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Completed Orders</span>
+                          <span className="font-bold">{completedOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Pending/Processing</span>
+                          <span className="font-bold">{pendingOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Cancelled Orders</span>
+                          <span className="font-bold">{cancelledOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-t pt-2">
+                          <span className="text-sm font-medium">Total Orders</span>
+                          <span className="font-bold">{totalOrdersCount}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Additional Statistics */}
+                  {analytics && (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm font-medium">Analytics Summary</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Total Revenue ({analyticsPeriod} days)</span>
+                            <span className="font-bold">${analytics.summary.totalRevenue.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Total Orders</span>
+                            <span className="font-bold">{analytics.summary.totalOrders}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Items Sold</span>
+                            <span className="font-bold">{analytics.summary.totalItems}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Average Order Value</span>
+                            <span className="font-bold">${analytics.summary.averageOrderValue.toFixed(2)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+
+                  {/* Product Status Breakdown */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm font-medium">Product Status Breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold">
+                            {products.filter((p) => p.status === 'approved').length}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Approved</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold">
+                            {products.filter((p) => p.status === 'pending').length}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Pending</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold">
+                            {products.filter((p) => p.status === 'rejected').length}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Rejected</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Order Status Breakdown */}
+                  {orders.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium">Order Status Breakdown</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => {
+                            const count = orders.filter((o) => o.status === status).length
+                            if (count === 0) return null
+                            return (
+                              <div key={status} className="text-center">
+                                <div className="text-2xl font-bold">{count}</div>
+                                <p className="text-xs text-muted-foreground capitalize">{status}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+        </TabsContent>
 
         <TabsContent value="products" className="space-y-4">
           <ProductsList
@@ -965,6 +1446,7 @@ export default function SellerProfile() {
                         <th className="h-10 px-4 text-left font-medium">Status</th>
                         <th className="h-10 px-4 text-left font-medium">Amount</th>
                         <th className="h-10 px-4 text-left font-medium">Items</th>
+                        <th className="h-10 px-4 text-left font-medium">Refund</th>
                         <th className="h-10 px-4 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -978,9 +1460,7 @@ export default function SellerProfile() {
                           )
                           .map((order, index) => {
                             const orderId = order.id || (order as any)._id
-                            const sellerOrderTotal = order.items?.reduce((sum: number, item: any) => {
-                              return sum + (item.price * item.quantity)
-                            }, 0) || order.totalAmount
+                            // Backend now returns totalAmount calculated for seller's items only (with tax)
                             const rowNo = (ordersPagination.page - 1) * ordersPagination.limit + index + 1
                             return (
                               <tr key={orderId} className="border-b transition-colors hover:bg-muted/50 last:border-0">
@@ -994,9 +1474,33 @@ export default function SellerProfile() {
                                     {order.status}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 font-medium">${sellerOrderTotal.toFixed(2)}</td>
+                                <td className="px-4 py-3 font-medium">${order.totalAmount.toFixed(2)}</td>
                                 <td className="px-4 py-3 text-muted-foreground">
                                   {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {order.paymentStatus === 'refunded' || order.refundRequest ? (
+                                    <div className="flex flex-col gap-1">
+                                      {order.refundRequest && (
+                                        <Badge
+                                          variant="outline"
+                                          className="w-fit"
+                                        >
+                                          {order.refundRequest.status}
+                                        </Badge>
+                                      )}
+                                      {order.refundRequest?.refundAmount && (
+                                        <span className="text-sm font-medium text-green-600">
+                                          ${order.refundRequest.refundAmount.toFixed(2)}
+                                        </span>
+                                      )}
+                                      {order.paymentStatus === 'refunded' && !order.refundRequest && (
+                                        <Badge variant="outline" className="w-fit">Refunded</Badge>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <Button
@@ -1322,7 +1826,15 @@ export default function SellerProfile() {
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Commission: ${earningsSummary.totalEarnings.commission.toFixed(2)}
+                    {marketplaceSettings && (
+                      <span className="ml-1">({marketplaceSettings.commissionRatePercent}% rate)</span>
+                    )}
                   </p>
+                  {marketplaceSettings && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      You receive {100 - marketplaceSettings.commissionRatePercent}% of sales
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1331,7 +1843,7 @@ export default function SellerProfile() {
                   <CardTitle className="text-sm font-medium">Available</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold">
                     ${earningsSummary.available.netAmount.toFixed(2)}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -1345,7 +1857,7 @@ export default function SellerProfile() {
                   <CardTitle className="text-sm font-medium">Pending</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-orange-600">
+                  <div className="text-2xl font-bold">
                     ${earningsSummary.pending.amount.toFixed(2)}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -1359,7 +1871,7 @@ export default function SellerProfile() {
                   <CardTitle className="text-sm font-medium">Paid Out</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold">
                     ${earningsSummary.paidOut.amount.toFixed(2)}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -1370,25 +1882,240 @@ export default function SellerProfile() {
             </div>
           )}
 
-          {/* Request Payout Button */}
+          {/* Available for Payout */}
           {earningsSummary && earningsSummary.available.netAmount > 0 && (
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Available for Payout</p>
-                    <p className="text-sm text-muted-foreground">
-                      ${earningsSummary.available.netAmount.toFixed(2)} from {earningsSummary.available.orderCount} order{earningsSummary.available.orderCount !== 1 ? 's' : ''}
-                    </p>
+              <CardHeader>
+                <CardTitle>Available for Payout</CardTitle>
+                <CardDescription>Orders ready for payout request</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="h-10 px-4 text-left font-medium w-12"></th>
+                          <th className="h-10 px-4 text-left font-medium">Amount</th>
+                          <th className="h-10 px-4 text-left font-medium">Commission</th>
+                          <th className="h-10 px-4 text-left font-medium">Commission Rate</th>
+                          <th className="h-10 px-4 text-left font-medium">Net Amount</th>
+                          <th className="h-10 px-4 text-left font-medium">Status</th>
+                          <th className="h-10 px-4 text-left font-medium">Orders</th>
+                          <th className="h-10 px-4 text-left font-medium">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          className="border-b transition-colors hover:bg-muted/50 cursor-pointer"
+                          onClick={() => {
+                            if (!availablePayoutExpanded && earningsSummary.available.orderIds.length > 0) {
+                              setAvailablePayoutLoading(true)
+                              const fetchOrderDetails = async () => {
+                                try {
+                                  const orderPromises = earningsSummary.available.orderIds.map(orderId => 
+                                    orderService.getOrderById(orderId)
+                                  )
+                                  const orderResponses = await Promise.all(orderPromises)
+                                  const fetchedOrders = orderResponses.map(res => res.order)
+                                  
+                                  const processedOrders = fetchedOrders.map(order => {
+                                    // Backend already filters items for seller, so use order.items directly
+                                    const items = order.items || []
+                                    
+                                    // Calculate seller revenue as subtotal (without tax) for earnings calculation
+                                    // Note: order.totalAmount includes tax, but earnings are calculated on subtotal
+                                    const sellerRevenue = items.reduce((sum: number, item: any) => {
+                                      return sum + (item.price * item.quantity)
+                                    }, 0)
+
+                                    return {
+                                      id: order.id || (order as any)._id || '',
+                                      orderNumber: (order.id || (order as any)._id || '').slice(-8),
+                                      createdAt: order.createdAt,
+                                      status: order.status,
+                                      items: items.map((item: any) => {
+                                        const product = typeof item.productId === 'object' ? item.productId : null
+                                        const productData = product as any
+                                        return {
+                                          productId: productData?._id || productData?.id || '',
+                                          title: item.title || productData?.title || 'Unknown Product',
+                                          imageUrl: productData?.imageUrl || productData?.imageUrls?.[0],
+                                          quantity: item.quantity,
+                                          price: item.price,
+                                          subtotal: item.price * item.quantity
+                                        }
+                                      }),
+                                      sellerRevenue
+                                    }
+                                  })
+                                  
+                                  setAvailablePayoutOrderDetails(processedOrders)
+                                } catch (error) {
+                                  console.error('Error fetching available payout order details:', error)
+                                  setAvailablePayoutOrderDetails([])
+                                } finally {
+                                  setAvailablePayoutLoading(false)
+                                }
+                              }
+                              fetchOrderDetails()
+                            }
+                            setAvailablePayoutExpanded(!availablePayoutExpanded)
+                          }}
+                        >
+                          <td className="px-4 py-3">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (!availablePayoutExpanded && earningsSummary.available.orderIds.length > 0) {
+                                  setAvailablePayoutLoading(true)
+                                  const fetchOrderDetails = async () => {
+                                    try {
+                                      const orderPromises = earningsSummary.available.orderIds.map(orderId => 
+                                        orderService.getOrderById(orderId)
+                                      )
+                                      const orderResponses = await Promise.all(orderPromises)
+                                      const fetchedOrders = orderResponses.map(res => res.order)
+                                      
+                                      const processedOrders = fetchedOrders.map(order => {
+                                        // Backend already filters items for seller, so use order.items directly
+                                        const items = order.items || []
+                                        
+                                        // Calculate seller revenue as subtotal (without tax) for earnings calculation
+                                        // Note: order.totalAmount includes tax, but earnings are calculated on subtotal
+                                        const sellerRevenue = items.reduce((sum: number, item: any) => {
+                                          return sum + (item.price * item.quantity)
+                                        }, 0)
+
+                                        return {
+                                          id: order.id || (order as any)._id || '',
+                                          orderNumber: (order.id || (order as any)._id || '').slice(-8),
+                                          createdAt: order.createdAt,
+                                          status: order.status,
+                                          items: items.map((item: any) => {
+                                            const product = typeof item.productId === 'object' ? item.productId : null
+                                            const productData = product as any
+                                            return {
+                                              productId: productData?._id || productData?.id || '',
+                                              title: item.title || productData?.title || 'Unknown Product',
+                                              imageUrl: productData?.imageUrl || productData?.imageUrls?.[0],
+                                              quantity: item.quantity,
+                                              price: item.price,
+                                              subtotal: item.price * item.quantity
+                                            }
+                                          }),
+                                          sellerRevenue
+                                        }
+                                      })
+                                      
+                                      setAvailablePayoutOrderDetails(processedOrders)
+                                    } catch (error) {
+                                      console.error('Error fetching available payout order details:', error)
+                                      setAvailablePayoutOrderDetails([])
+                                    } finally {
+                                      setAvailablePayoutLoading(false)
+                                    }
+                                  }
+                                  fetchOrderDetails()
+                                }
+                                setAvailablePayoutExpanded(!availablePayoutExpanded)
+                              }}
+                            >
+                              {availablePayoutExpanded ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </td>
+                          <td className="px-4 py-3 font-medium">
+                            ${earningsSummary.available.amount.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            ${earningsSummary.available.commission.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {earningsSummary.available.amount > 0 ? (
+                              <span>{((earningsSummary.available.commission / earningsSummary.available.amount) * 100).toFixed(1)}%</span>
+                            ) : (
+                              <span className="text-muted-foreground">N/A</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-green-600">
+                            ${earningsSummary.available.netAmount.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="secondary">Available</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {earningsSummary.available.orderCount} order{earningsSummary.available.orderCount !== 1 ? 's' : ''}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRequestPayout()
+                              }}
+                              disabled={requestingPayout || earningsSummary.available.netAmount <= 0}
+                              className="gap-2"
+                              size="sm"
+                            >
+                              <Download className="h-4 w-4" />
+                              {requestingPayout ? 'Requesting...' : 'Request'}
+                            </Button>
+                          </td>
+                        </tr>
+                        {availablePayoutExpanded && (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-4 bg-muted/30">
+                              <div className="space-y-4">
+                                <h4 className="font-semibold text-sm mb-3">Order Details</h4>
+                                {availablePayoutLoading ? (
+                                  <div className="text-center py-8">
+                                    <p className="text-muted-foreground">Loading order details...</p>
+                                  </div>
+                                ) : availablePayoutOrderDetails.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {availablePayoutOrderDetails.map((order) => (
+                                      <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                                        <div className="flex items-center gap-4 flex-1">
+                                          <div>
+                                            <p className="font-medium">Order #{order.orderNumber}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-sm">
+                                              <span className="text-muted-foreground">Amount: </span>
+                                              <span className="font-medium">${order.sellerRevenue.toFixed(2)}</span>
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <Button
+                                          onClick={() => navigate(`/order/${order.id}`)}
+                                          variant="outline"
+                                          size="sm"
+                                          className="gap-2"
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                          View Order
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-8">
+                                    <p className="text-muted-foreground">No order details available</p>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                  <Button
-                    onClick={handleRequestPayout}
-                    disabled={requestingPayout || earningsSummary.available.netAmount <= 0}
-                    className="gap-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    {requestingPayout ? 'Requesting...' : 'Request Payout'}
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1409,53 +2136,130 @@ export default function SellerProfile() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50">
+                          <th className="h-10 px-4 text-left font-medium w-12"></th>
                           <th className="h-10 px-4 text-left font-medium">Date</th>
                           <th className="h-10 px-4 text-left font-medium">Amount</th>
                           <th className="h-10 px-4 text-left font-medium">Commission</th>
+                          <th className="h-10 px-4 text-left font-medium">Commission Rate</th>
                           <th className="h-10 px-4 text-left font-medium">Net Amount</th>
                           <th className="h-10 px-4 text-left font-medium">Status</th>
                           <th className="h-10 px-4 text-left font-medium">Orders</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {payoutHistory.payouts.map((payout) => (
-                          <tr
-                            key={payout.id}
-                            className="border-b transition-colors hover:bg-muted/50 last:border-0"
-                          >
-                            <td className="px-4 py-3 text-muted-foreground">
-                              {new Date(payout.requestedAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-3 font-medium">
-                              ${payout.amount.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">
-                              ${payout.commission.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 font-medium text-green-600">
-                              ${payout.netAmount.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge
-                                variant={
-                                  payout.status === 'completed'
-                                    ? 'default'
-                                    : payout.status === 'failed' || payout.status === 'cancelled'
-                                    ? 'destructive'
-                                    : 'secondary'
-                                }
+                        {payoutHistory.payouts.map((payout) => {
+                          const isExpanded = expandedPayoutRows.has(payout.id)
+                          const toggleExpand = () => {
+                            const newExpanded = new Set(expandedPayoutRows)
+                            if (isExpanded) {
+                              newExpanded.delete(payout.id)
+                            } else {
+                              newExpanded.add(payout.id)
+                            }
+                            setExpandedPayoutRows(newExpanded)
+                          }
+
+                          return (
+                            <>
+                              <tr
+                                key={payout.id}
+                                className="border-b transition-colors hover:bg-muted/50 last:border-0 cursor-pointer"
+                                onClick={toggleExpand}
                               >
-                                {payout.status}
-                              </Badge>
-                              {payout.failureReason && (
-                                <p className="text-xs text-red-600 mt-1">{payout.failureReason}</p>
+                                <td className="px-4 py-3">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      toggleExpand()
+                                    }}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {new Date(payout.requestedAt).toLocaleDateString()}
+                                </td>
+                                <td className="px-4 py-3 font-medium">
+                                  ${payout.amount.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  ${payout.commission.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {payout.commissionRate !== undefined && payout.commissionRate !== null ? (
+                                    <span>{(payout.commissionRate * 100).toFixed(1)}%</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">N/A</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 font-medium text-green-600">
+                                  ${payout.netAmount.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge
+                                    variant={
+                                      payout.status === 'completed'
+                                        ? 'default'
+                                        : payout.status === 'failed' || payout.status === 'cancelled'
+                                        ? 'destructive'
+                                        : 'secondary'
+                                    }
+                                  >
+                                    {payout.status}
+                                  </Badge>
+                                  {payout.failureReason && (
+                                    <p className="text-xs text-red-600 mt-1">{payout.failureReason}</p>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {payout.orderCount} order{payout.orderCount !== 1 ? 's' : ''}
+                                </td>
+                              </tr>
+                              {isExpanded && payout.orders && payout.orders.length > 0 && (
+                                <tr key={`${payout.id}-details`}>
+                                  <td colSpan={8} className="px-4 py-4 bg-muted/30">
+                                    <div className="space-y-4">
+                                      <h4 className="font-semibold text-sm mb-3">Order Details</h4>
+                                      <div className="space-y-2">
+                                        {payout.orders.map((order) => (
+                                          <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                                            <div className="flex items-center gap-4 flex-1">
+                                              <div>
+                                                <p className="font-medium">Order #{order.orderNumber}</p>
+                                              </div>
+                                              <div>
+                                                <p className="text-sm">
+                                                  <span className="text-muted-foreground">Amount: </span>
+                                                  <span className="font-medium">${order.sellerRevenue.toFixed(2)}</span>
+                                                </p>
+                                              </div>
+                                            </div>
+                                            <Button
+                                              onClick={() => navigate(`/order/${order.id}`)}
+                                              variant="outline"
+                                              size="sm"
+                                              className="gap-2"
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                              View Order
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                            <td className="px-4 py-3 text-muted-foreground">
-                              {payout.orderCount} order{payout.orderCount !== 1 ? 's' : ''}
-                            </td>
-                          </tr>
-                        ))}
+                            </>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1570,6 +2374,7 @@ export default function SellerProfile() {
                           <th className="h-12 px-4 text-left font-medium">Comment</th>
                           <th className="h-12 px-4 text-left font-medium">Status</th>
                           <th className="h-12 px-4 text-left font-medium">Date</th>
+                          <th className="h-12 px-4 text-right font-medium">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1621,6 +2426,19 @@ export default function SellerProfile() {
                                   </td>
                                   <td className="px-4 py-3 text-muted-foreground">
                                     {new Date(review.createdAt).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setSelectedReviewDetail(review)
+                                        setReviewDetailDialogOpen(true)
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4 mr-1" />
+                                      View Detail
+                                    </Button>
                                   </td>
                                 </tr>
                               )
@@ -1721,9 +2539,94 @@ export default function SellerProfile() {
               )}
             </CardContent>
           </Card>
+          
+          {/* Review Detail Dialog */}
+          <Dialog open={reviewDetailDialogOpen} onOpenChange={setReviewDetailDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Review Details</DialogTitle>
+                <DialogDescription>Complete information about this review</DialogDescription>
+              </DialogHeader>
+              {selectedReviewDetail && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Product</Label>
+                      <p className="mt-1 font-medium">
+                        {typeof selectedReviewDetail.productId === 'object' && selectedReviewDetail.productId !== null
+                          ? (selectedReviewDetail.productId as any).title || 'N/A'
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                      <div className="mt-1">
+                        <Badge
+                          variant={
+                            selectedReviewDetail.status === 'approved'
+                              ? 'default'
+                              : selectedReviewDetail.status === 'rejected'
+                              ? 'destructive'
+                              : 'secondary'
+                          }
+                        >
+                          {selectedReviewDetail.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Customer Name</Label>
+                      <p className="mt-1">
+                        {typeof selectedReviewDetail.userId === 'object' && selectedReviewDetail.userId !== null
+                          ? (selectedReviewDetail.userId as any).fullName || (selectedReviewDetail.userId as any).email || 'Anonymous'
+                          : 'Anonymous'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Customer Email</Label>
+                      <p className="mt-1">
+                        {typeof selectedReviewDetail.userId === 'object' && selectedReviewDetail.userId !== null
+                          ? (selectedReviewDetail.userId as any).email || 'N/A'
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Rating</Label>
+                    <div className="mt-1">
+                      <RatingDisplay rating={selectedReviewDetail.rating} size="md" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Comment</Label>
+                    <p className="mt-1 text-sm whitespace-pre-wrap">
+                      {selectedReviewDetail.comment || 'No comment provided'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Created At</Label>
+                      <p className="mt-1 text-sm">
+                        {new Date(selectedReviewDetail.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Updated At</Label>
+                      <p className="mt-1 text-sm">
+                        {new Date(selectedReviewDetail.updatedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="profile" className="space-y-4">
+
           <Card>
             <CardHeader>
               <CardTitle>Profile Information</CardTitle>
@@ -1742,18 +2645,11 @@ export default function SellerProfile() {
                     <Label htmlFor="fullName">Full Name</Label>
                     <Input
                       id="fullName"
-                      {...register('fullName', {
-                        required: 'Full name is required',
-                        minLength: {
-                          value: 2,
-                          message: 'Full name must be at least 2 characters',
-                        },
-                      })}
-                      placeholder="Enter your full name"
+                      value={user?.fullName || ''}
+                      disabled
+                      className="bg-muted"
                     />
-                    {errors.fullName && (
-                      <p className="text-sm text-destructive">{errors.fullName.message}</p>
-                    )}
+                    <p className="text-xs text-muted-foreground">Full name cannot be changed</p>
                   </div>
 
                   <div className="space-y-2">
@@ -1772,18 +2668,11 @@ export default function SellerProfile() {
                     <Label htmlFor="businessName">Business Name</Label>
                     <Input
                       id="businessName"
-                      {...register('businessName', {
-                        required: 'Business name is required',
-                        minLength: {
-                          value: 2,
-                          message: 'Business name must be at least 2 characters',
-                        },
-                      })}
-                      placeholder="Enter your business name"
+                      value={sellerProfile?.businessName || ''}
+                      disabled
+                      className="bg-muted"
                     />
-                    {errors.businessName && (
-                      <p className="text-sm text-destructive">{errors.businessName.message}</p>
-                    )}
+                    <p className="text-xs text-muted-foreground">Business name cannot be changed</p>
                   </div>
 
                   <div className="space-y-2">
@@ -1837,201 +2726,187 @@ export default function SellerProfile() {
                     <p className="text-sm font-medium mb-1">Account Status</p>
                     <p className="text-muted-foreground capitalize">{sellerProfile?.status || 'Unknown'}</p>
                   </div>
-                  <Button onClick={() => setIsEditingProfile(true)}>Edit Profile</Button>
                 </>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-      <AlertDialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
-        <AlertDialogContent>
+      <AlertDialog 
+        open={payoutDialogOpen} 
+        onOpenChange={(open) => {
+          setPayoutDialogOpen(open)
+          if (!open) {
+            // Reset state when dialog closes
+            setPayoutOrderDetails([])
+            setPayoutAverageRating(null)
+            setPayoutOrderDetailsLoading(false)
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Request Payout</AlertDialogTitle>
             <AlertDialogDescription>
-              {earningsSummary && `Are you sure you want to request a payout of $${earningsSummary.available.netAmount.toFixed(2)}?`}
+              Review the payout details before confirming
             </AlertDialogDescription>
           </AlertDialogHeader>
+          
+          {earningsSummary && (
+            <div className="space-y-6 py-4">
+              {/* Payout Summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Payout Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Amount</p>
+                      <p className="text-2xl font-bold">${earningsSummary.available.amount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Commission</p>
+                      <p className="text-2xl font-bold">${earningsSummary.available.commission.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Net Amount</p>
+                      <p className="text-2xl font-bold">${earningsSummary.available.netAmount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Average Rating</p>
+                      <div className="flex items-center gap-2">
+                        {payoutOrderDetailsLoading ? (
+                          <p className="text-2xl font-bold">Loading...</p>
+                        ) : payoutAverageRating !== null ? (
+                          <>
+                            <Star className="h-6 w-6 fill-yellow-400 text-yellow-400" />
+                            <p className="text-2xl font-bold">{payoutAverageRating.toFixed(1)}</p>
+                          </>
+                        ) : (
+                          <p className="text-2xl font-bold text-muted-foreground">N/A</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t">
+                    <p className="text-sm text-muted-foreground">
+                      Available for Payout: ${earningsSummary.available.netAmount.toFixed(2)} from {earningsSummary.available.orderCount} order{earningsSummary.available.orderCount !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Order Details */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Order Details</CardTitle>
+                  <CardDescription>
+                    {earningsSummary.available.orderCount} order{earningsSummary.available.orderCount !== 1 ? 's' : ''} included in this payout
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {payoutOrderDetailsLoading ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">Loading order details...</p>
+                    </div>
+                  ) : payoutOrderDetails.length > 0 ? (
+                    <div className="space-y-4">
+                      {payoutOrderDetails.map((order) => {
+                        const orderId = order.id || (order as any)._id || ''
+                        const orderDate = new Date(order.createdAt).toLocaleDateString()
+                        const sellerItems = order.items?.filter((item: any) => {
+                          const product = typeof item.productId === 'object' ? item.productId : null
+                          const productData = product as any
+                          return productData?.sellerId && productData.sellerId.toString() === user?._id
+                        }) || []
+                        
+                        const sellerRevenue = sellerItems.reduce((sum: number, item: any) => {
+                          return sum + (item.price * item.quantity)
+                        }, 0)
+
+                        const commissionRate = marketplaceSettings?.commissionRate || 0.1
+                        const orderCommission = sellerRevenue * commissionRate
+                        const orderNetAmount = sellerRevenue - orderCommission
+
+                        return (
+                          <div key={orderId} className="border rounded-lg p-4 space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium">Order #{orderId.slice(-8)}</p>
+                                <p className="text-sm text-muted-foreground">{orderDate}</p>
+                              </div>
+                              <Badge variant="outline">{order.status}</Badge>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              {sellerItems.map((item: any, idx: number) => {
+                                const product = typeof item.productId === 'object' ? item.productId : null
+                                const productData = product as any
+                                const productTitle = item.title || productData?.title || 'Unknown Product'
+                                const productImage = productData?.imageUrl || productData?.imageUrls?.[0]
+                                
+                                return (
+                                  <div key={idx} className="flex items-center gap-3 p-2 bg-muted/50 rounded">
+                                    {productImage && (
+                                      <img 
+                                        src={productImage} 
+                                        alt={productTitle}
+                                        className="w-12 h-12 object-cover rounded"
+                                      />
+                                    )}
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium">{productTitle}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        Qty: {item.quantity} × ${item.price.toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            <div className="pt-2 border-t space-y-1">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Subtotal:</span>
+                                <span className="font-medium">${sellerRevenue.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Commission ({((commissionRate * 100).toFixed(0))}%):</span>
+                                <span className="font-medium text-orange-600">${orderCommission.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm font-semibold pt-1">
+                                <span>Net Amount:</span>
+                                <span className="text-green-600">${orderNetAmount.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No order details available</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel disabled={requestingPayout}>Cancel</AlertDialogCancel>
             <Button
               variant="default"
-              disabled={requestingPayout}
+              disabled={requestingPayout || !earningsSummary || earningsSummary.available.netAmount <= 0}
               onClick={handlePayoutConfirm}
             >
-              {requestingPayout ? 'Requesting...' : 'Confirm'}
+              {requestingPayout ? 'Requesting...' : 'Confirm Payout'}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Statistics Dialog */}
-      <Dialog open={statisticsDialogOpen} onOpenChange={setStatisticsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Seller Statistics
-            </DialogTitle>
-            <DialogDescription>
-              Overview of your store performance and key metrics
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6 mt-4">
-            {/* Summary Cards */}
-            <div className="grid md:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ${orders.reduce((sum, order) => sum + order.totalAmount, 0).toFixed(2)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">All time</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Orders</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{orders.length}</div>
-                  <p className="text-xs text-muted-foreground">Total orders</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Products</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{productsPagination.total}</div>
-                  <p className="text-xs text-muted-foreground">Total listings</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Pending</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{products.filter((p) => p.status === 'pending').length}</div>
-                  <p className="text-xs text-muted-foreground">Awaiting approval</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Additional Statistics */}
-            {analytics && (
-              <div className="grid md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">Analytics Summary</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Revenue ({analyticsPeriod} days)</span>
-                      <span className="font-bold">${analytics.summary.totalRevenue.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total Orders</span>
-                      <span className="font-bold">{analytics.summary.totalOrders}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Items Sold</span>
-                      <span className="font-bold">{analytics.summary.totalItems}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Average Order Value</span>
-                      <span className="font-bold">${analytics.summary.averageOrderValue.toFixed(2)}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {earningsSummary && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm font-medium">Earnings Summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Total Earnings</span>
-                        <span className="font-bold">${earningsSummary.totalEarnings.netAmount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Available</span>
-                        <span className="font-bold text-green-600">${earningsSummary.available.netAmount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Pending</span>
-                        <span className="font-bold text-orange-600">${earningsSummary.pending.amount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Paid Out</span>
-                        <span className="font-bold text-blue-600">${earningsSummary.paidOut.amount.toFixed(2)}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )}
-
-            {/* Product Status Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Product Status Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {products.filter((p) => p.status === 'approved').length}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Approved</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">
-                      {products.filter((p) => p.status === 'pending').length}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Pending</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-red-600">
-                      {products.filter((p) => p.status === 'rejected').length}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Rejected</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Order Status Breakdown */}
-            {orders.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Order Status Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => {
-                      const count = orders.filter((o) => o.status === status).length
-                      if (count === 0) return null
-                      return (
-                        <div key={status} className="text-center">
-                          <div className="text-2xl font-bold">{count}</div>
-                          <p className="text-xs text-muted-foreground capitalize">{status}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
