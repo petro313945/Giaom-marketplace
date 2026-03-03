@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host 0.0.0.0 --port 3000",
+    "pm2:start": "pm2 start ecosystem.config.js --only giaom-client",
+    "pm2:stop": "pm2 stop giaom-client",
+    "pm2:restart": "pm2 restart giaom-client",
+    "pm2:delete": "pm2 delete giaom-client",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
