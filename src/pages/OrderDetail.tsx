@@ -607,18 +607,31 @@ export default function OrderDetail() {
               )}
 
               <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>${order.totalAmount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Shipping</span>
-                  <span>Free</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg border-t pt-2">
-                  <span>Total</span>
-                  <span>${order.totalAmount.toFixed(2)}</span>
-                </div>
+                {/* Calculate subtotal (totalAmount includes 8% tax) */}
+                {(() => {
+                  const subtotal = order.totalAmount / 1.08;
+                  const tax = order.totalAmount - subtotal;
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Subtotal</span>
+                        <span>${subtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Shipping</span>
+                        <span>Free</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tax (8%)</span>
+                        <span>${tax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-lg border-t pt-2">
+                        <span>Total</span>
+                        <span>${order.totalAmount.toFixed(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
                 {sellerEarnings && (
                   <div className="border-t pt-3 mt-3 space-y-2 bg-muted/30 p-3 rounded-md">
                     <p className="text-xs font-medium text-muted-foreground mb-2">Seller Earnings (Your Products Only)</p>

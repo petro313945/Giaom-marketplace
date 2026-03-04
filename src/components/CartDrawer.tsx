@@ -23,7 +23,7 @@ export default function CartDrawer() {
   const { toast } = useToast()
   const [clearCartDialogOpen, setClearCartDialogOpen] = useState(false)
 
-  const calculateTotal = () => {
+  const calculateSubtotal = () => {
     if (!cart || !cart.items) return 0
     return cart.items.reduce((sum, item) => {
       const product = item.productId as any
@@ -32,6 +32,14 @@ export default function CartDrawer() {
       const itemTotal = calculateBulkDiscountTotal(basePrice, item.quantity, bulkDiscountTiers)
       return sum + itemTotal
     }, 0)
+  }
+
+  const calculateTax = () => {
+    return calculateSubtotal() * 0.08
+  }
+
+  const calculateTotal = () => {
+    return calculateSubtotal() + calculateTax()
   }
 
   const calculateOriginalTotal = () => {
@@ -173,7 +181,7 @@ export default function CartDrawer() {
                   )
                 })}
               </div>
-              <div className="border-t pt-4 space-y-4">
+              <div className="border-t pt-4 space-y-2">
                 {totalDiscount > 0 && (
                   <div className="flex justify-between items-center text-sm">
                     <span>Subtotal:</span>
@@ -186,10 +194,21 @@ export default function CartDrawer() {
                     <span>-${totalDiscount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center text-lg font-bold">
+                <div className="flex justify-between items-center text-sm">
+                  <span>Subtotal:</span>
+                  <span>${calculateSubtotal().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span>Tax (8%):</span>
+                  <span>${calculateTax().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-lg font-bold border-t pt-2">
                   <span>Total:</span>
                   <span>${calculateTotal().toFixed(2)}</span>
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  * Tax will be calculated at checkout
+                </p>
                 <Button className="w-full" size="lg" asChild>
                   <Link to="/checkout">Proceed to Checkout</Link>
                 </Button>

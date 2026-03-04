@@ -690,6 +690,9 @@ export default function ProductDetail() {
                   Total: ${getTotalPrice().toFixed(2)} for {quantity} {quantity === 1 ? 'item' : 'items'}
                 </div>
               )}
+              <div className="text-xs text-muted-foreground mt-2">
+                * Price shown excludes tax. 8% tax will be added at checkout.
+              </div>
             </div>
 
             {/* Bulk Discount Tiers Display */}
