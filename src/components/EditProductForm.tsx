@@ -122,7 +122,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
             const colorImgsMap = new Map<string, ImageItem[]>()
             if (fullProduct.colorImages && typeof fullProduct.colorImages === 'object') {
               Object.keys(fullProduct.colorImages).forEach(color => {
-                const urls = fullProduct.colorImages[color]
+                const urls = fullProduct.colorImages?.[color]
                 if (Array.isArray(urls) && urls.length > 0) {
                   colorImgsMap.set(color, urls.map(url => ({
                     id: `existing-color-${color}-${url}`,
@@ -168,7 +168,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
             const colorImgsMap = new Map<string, ImageItem[]>()
             if (product.colorImages && typeof product.colorImages === 'object') {
               Object.keys(product.colorImages).forEach(color => {
-                const urls = product.colorImages[color]
+                const urls = product.colorImages?.[color]
                 if (Array.isArray(urls) && urls.length > 0) {
                   colorImgsMap.set(color, urls.map(url => ({
                     id: `existing-color-${color}-${url}`,
@@ -213,7 +213,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         const colorImgsMap = new Map<string, ImageItem[]>()
         if (product.colorImages && typeof product.colorImages === 'object') {
           Object.keys(product.colorImages).forEach(color => {
-            const urls = product.colorImages[color]
+            const urls = product.colorImages?.[color]
             if (Array.isArray(urls) && urls.length > 0) {
               colorImgsMap.set(color, urls.map(url => ({
                 id: `existing-color-${color}-${url}`,
@@ -252,14 +252,6 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
     )
   }
 
-  // Toggle color selection
-  const toggleColor = (color: string) => {
-    setSelectedColors(prev => 
-      prev.includes(color) 
-        ? prev.filter(c => c !== color)
-        : [...prev, color]
-    )
-  }
 
   // Add a new color to color images
   const addColorForImages = (colorName: string) => {
@@ -598,7 +590,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         Object.keys(currentProduct.colorImages).forEach(color => {
           // Only preserve if we don't have new images for this color
           if (!colorImageUrls[color]) {
-            const existingUrls = currentProduct.colorImages[color]
+            const existingUrls = currentProduct.colorImages?.[color]
             if (Array.isArray(existingUrls) && existingUrls.length > 0) {
               colorImageUrls[color] = [...existingUrls]
             }
@@ -632,7 +624,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
         bulkDiscountTiers: discountTiers.length > 0 ? discountTiers : [],
       }
       
-      const response = await productService.updateProduct(currentProduct._id || currentProduct.id!, updateData)
+      await productService.updateProduct(currentProduct._id || currentProduct.id!, updateData)
 
       toast({
         title: 'Product Updated',
@@ -1310,7 +1302,7 @@ export default function EditProductForm({ product, open, onOpenChange, onProduct
                   Upload
                 </Button>
               </div>
-              {(images.length > 0 || urlInputs.some(u => u.trim())) > 0 && (
+              {(images.length > 0 || urlInputs.some(u => u.trim().length > 0)) && (
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   {images.map((img) => (
                     <div key={img.id} className="relative group">

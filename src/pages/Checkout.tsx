@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
 import {
   Elements,
   CardElement,
@@ -20,8 +20,8 @@ import { useAuth } from '../context/AuthContext'
 import * as orderService from '../services/orderService'
 import * as addressService from '../services/addressService'
 import * as paymentService from '../services/paymentService'
-import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
-import { calculateBulkDiscountPrice, calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
+import { getFirstImageUrl } from '../utils/imageUtils'
+import { calculateBulkDiscountTotal, getApplicableDiscountTier } from '../utils/bulkDiscount'
 import type { ShippingAddress } from '../services/orderService'
 import type { Address } from '../services/addressService'
 
@@ -147,7 +147,7 @@ function PaymentForm({
 // Main Checkout Component
 function CheckoutForm() {
   const { cart, loading: cartLoading, clearCart } = useCart()
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -264,18 +264,8 @@ function CheckoutForm() {
   const tax = subtotal * 0.08
   const total = subtotal + tax
 
-  const onSubmit = async (data: CheckoutFormData) => {
+  const onSubmit = async (_data: CheckoutFormData) => {
     setError(null)
-
-    const shippingAddress: ShippingAddress = {
-      fullName: data.fullName,
-      address: data.address,
-      city: data.city,
-      state: data.state || '',
-      zipCode: data.zipCode,
-      country: data.country,
-      phone: data.phone || '',
-    }
 
     // Prepare cart items for guest checkout
     let cartItemsForPayment: any[] | undefined = undefined;

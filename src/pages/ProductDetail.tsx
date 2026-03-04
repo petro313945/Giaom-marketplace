@@ -42,7 +42,7 @@ export default function ProductDetail() {
   const [wishlistLoading, setWishlistLoading] = useState(false)
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
   const [userReview, setUserReview] = useState<Review | null>(null)
-  const [loadingReviewStats, setLoadingReviewStats] = useState(false)
+  const [_loadingReviewStats, setLoadingReviewStats] = useState(false)
   const [selectedVariant, setSelectedVariant] = useState<{ size?: string; color?: string } | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [categoryName, setCategoryName] = useState<string>('')
@@ -133,6 +133,7 @@ export default function ProductDetail() {
       
       try {
         const productId = product._id || product.id
+        if (!productId) return
         const response = await wishlistService.checkWishlistStatus(productId)
         setInWishlist(response.inWishlist)
       } catch (error) {
@@ -227,6 +228,7 @@ export default function ProductDetail() {
     
     try {
       const productId = product._id || product.id
+      if (!productId) return
       await addItem(productId, quantity, selectedVariant || undefined)
       setAdded(true)
       const variantLabel = selectedVariant 
@@ -264,6 +266,7 @@ export default function ProductDetail() {
     
     try {
       const productId = product._id || product.id
+      if (!productId) return
       
       // Clear cart first, then add this item
       await clearCart()
@@ -336,42 +339,6 @@ export default function ProductDetail() {
     return getApplicableDiscountTier(quantity, product.bulkDiscountTiers)
   }
 
-  // Get the matching variant object based on selected variant
-  // Prioritizes variants with images when multiple matches exist
-  const getMatchingVariant = () => {
-    if (!product || !product.variants || !selectedVariant) return null
-    
-    // Find all matching variants
-    const matchingVariants = product.variants.filter(v => {
-      const sizeMatch = !selectedVariant.size || v.size === selectedVariant.size
-      const colorMatch = !selectedVariant.color || v.color === selectedVariant.color
-      return sizeMatch && colorMatch
-    })
-    
-    if (matchingVariants.length === 0) return null
-    
-    // Prioritize variant with images if available
-    const variantWithImages = matchingVariants.find(v => v.imageUrls && v.imageUrls.length > 0)
-    if (variantWithImages) return variantWithImages
-    
-    // Otherwise return the first matching variant
-    return matchingVariants[0]
-  }
-
-  // Get main product images only (for thumbnail list)
-  const getMainProductImages = () => {
-    if (!product) return []
-    
-    if (product.imageUrls && product.imageUrls.length > 0) {
-      return product.imageUrls
-    }
-    
-    if (product.imageUrl) {
-      return [product.imageUrl]
-    }
-    
-    return []
-  }
 
   // Get images to display (color-based images if available, with fallback to product images)
   // Images are per color, not per size - following Amazon/e-commerce best practices
@@ -460,6 +427,7 @@ export default function ProductDetail() {
     setWishlistLoading(true)
     try {
       const productId = product._id || product.id
+      if (!productId) return
       if (inWishlist) {
         await wishlistService.removeFromWishlist(productId)
         setInWishlist(false)
@@ -882,11 +850,13 @@ export default function ProductDetail() {
               <p className="text-sm text-muted-foreground mb-1">Category</p>
               <p className="font-medium capitalize">{product.category}</p>
             </div>
-            <ReportDialog
-              reportedType="product"
-              reportedId={product._id || product.id}
-              reportedTitle={product.title}
-            />
+            {product._id || product.id ? (
+              <ReportDialog
+                reportedType="product"
+                reportedId={product._id || product.id || ''}
+                reportedTitle={product.title}
+              />
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-3">
@@ -1054,6 +1024,7 @@ export default function ProductDetail() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {relatedProducts.map((relatedProduct) => {
               const productId = relatedProduct._id || relatedProduct.id
+              if (!productId) return null
               return (
                 <Link key={productId} to={`/product/${productId}`} className="block">
                   <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">

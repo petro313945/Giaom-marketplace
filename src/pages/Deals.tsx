@@ -4,7 +4,6 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useCart } from '../context/CartContext'
-import { useAuth } from '../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import * as productService from '../services/productService'
 import { getFirstImageUrl } from '../utils/imageUtils'
@@ -33,7 +32,6 @@ export default function Deals() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const { addItem } = useCart()
-  const { isAuthenticated } = useAuth()
   const { toast } = useToast()
 
   // Fetch products with bulk discounts
@@ -53,7 +51,7 @@ export default function Deals() {
             page: currentPage,
             limit: maxLimit,
             sortBy,
-            sortOrder
+            sortOrder: sortOrder as 'asc' | 'desc' | undefined
           })
           
           // Filter products that have bulkDiscountTiers
@@ -140,6 +138,7 @@ export default function Deals() {
     
     try {
       const productId = product._id || product.id
+      if (!productId) return
       await addItem(productId, 1)
       toast({
         title: 'Added to Cart',
@@ -161,6 +160,7 @@ export default function Deals() {
 
     try {
       const productId = selectedProduct._id || selectedProduct.id
+      if (!productId) return
       await addItem(productId, 1, variant)
       toast({
         title: 'Added to Cart',
@@ -235,6 +235,7 @@ export default function Deals() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {products.map((product) => {
               const productId = product._id || product.id
+              if (!productId) return null
               const bestDiscount = getBestDiscount(product)
               const discountTier = getApplicableDiscountTier(1, product.bulkDiscountTiers)
               const discountedPrice = discountTier 

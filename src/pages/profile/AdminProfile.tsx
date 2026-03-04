@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Users, ShoppingBag, Store, StoreIcon, AlertCircle, Trash2, Edit, Package, DollarSign, TrendingUp, ArrowRight, ShoppingCart, Clock, Star, Eye, Wallet, CheckCircle, XCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, BarChart3, Key, Tags, Home, RefreshCw, Database, Download } from 'lucide-react'
+import { ShoppingBag, Store, StoreIcon, AlertCircle, Trash2, Edit, Package, DollarSign, ShoppingCart, Star, Eye, Wallet, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, BarChart3, Key, Tags, Home, RefreshCw, Database, Download } from 'lucide-react'
 import * as userService from '../../services/userService'
 import * as sellerService from '../../services/sellerService'
 import * as productService from '../../services/productService'
@@ -79,11 +79,6 @@ export default function AdminProfile() {
   const [reportsSortOrder, setReportsSortOrder] = useState<'asc' | 'desc'>('desc')
   const [pendingReportsCount, setPendingReportsCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [editingUserId, setEditingUserId] = useState<string | null>(null)
-  const [editingRole, setEditingRole] = useState<string>('')
-  const [resolvingReportId, setResolvingReportId] = useState<string | null>(null)
-  const [dismissingReportId, setDismissingReportId] = useState<string | null>(null)
-  const [reportAdminNotes, setReportAdminNotes] = useState<{ [key: string]: string }>({})
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
   const [editReportDialogOpen, setEditReportDialogOpen] = useState(false)
@@ -901,30 +896,6 @@ export default function AdminProfile() {
     }
   }, [activeTab])
 
-  const handleRoleChange = async (userId: string, newRole: 'customer' | 'seller' | 'admin') => {
-    try {
-      await userService.changeUserRole(userId, newRole)
-      setAllUsers((prev) =>
-        prev.map((u) => {
-          const uId = (u as any)._id || u.id
-          return uId === userId ? { ...u, role: newRole } : u
-        })
-      )
-      setEditingUserId(null)
-      toast({
-        title: 'User Role Updated',
-        description: 'The user role has been updated successfully.',
-        variant: 'default',
-      })
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.error || 'Failed to update user role'
-      toast({
-        title: 'Update Failed',
-        description: errorMessage,
-        variant: 'destructive',
-      })
-    }
-  }
 
   const handleDeleteUser = (userId: string, userName: string) => {
     setUserToDelete({ id: userId, name: userName })
@@ -1229,12 +1200,8 @@ export default function AdminProfile() {
     }
   }
 
-  const pendingSellers = allSellers.filter((s) => s.status === 'pending')
-  const activeSellers = allSellers.filter((s) => s.status === 'approved').length
-
   // Separate buyers (customers) and sellers from all users
   const allBuyers = allUsers.filter((u) => u.role === 'customer')
-  const allSellersFromUsers = allUsers.filter((u) => u.role === 'seller')
 
   // Get sorted sellers
   const getSortedSellers = () => {
@@ -3808,11 +3775,6 @@ export default function AdminProfile() {
                           const customerEmail = typeof userId === 'object' 
                             ? userId?.email 
                             : refundRequest.guestEmail || 'N/A'
-                          const statusColor = 
-                            refundRequest.status === 'pending' ? 'text-yellow-600' :
-                            refundRequest.status === 'approved' ? 'text-green-600' :
-                            refundRequest.status === 'rejected' ? 'text-red-600' :
-                            'text-blue-600'
 
                           return (
                             <tr key={refundRequest.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">

@@ -5,7 +5,6 @@ import RatingDisplay from './RatingDisplay';
 import ReportDialog from './ReportDialog';
 import * as reviewService from '../services/reviewService';
 import type { Review } from '../services/reviewService';
-import { useAuth } from '../context/AuthContext';
 
 interface ReviewListProps {
   productId: string;
@@ -14,15 +13,12 @@ interface ReviewListProps {
 }
 
 export default function ReviewList({
-  productId,
-  showForm = false,
-  onReviewSubmit
+  productId
 }: ReviewListProps) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const { user } = useAuth();
 
   useEffect(() => {
     fetchReviews();

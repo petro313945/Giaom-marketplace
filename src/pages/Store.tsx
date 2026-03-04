@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sliders, X, Store as StoreIcon } from 'lucide-react'
 import { useCart } from '../context/CartContext'
-import { useAuth } from '../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import * as productService from '../services/productService'
 import { getFirstImageUrl } from '../utils/imageUtils'
@@ -17,7 +16,6 @@ import type { Product } from '../services/productService'
 
 export default function Store() {
   const { sellerId } = useParams<{ sellerId: string }>()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,7 +31,6 @@ export default function Store() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const { addItem } = useCart()
-  const { isAuthenticated } = useAuth()
   const { toast } = useToast()
 
   // Get current filter values from URL
@@ -132,6 +129,7 @@ export default function Store() {
     
     try {
       const productId = product._id || product.id
+      if (!productId) return
       await addItem(productId, 1)
       toast({
         title: 'Added to Cart',
@@ -153,6 +151,7 @@ export default function Store() {
 
     try {
       const productId = selectedProduct._id || selectedProduct.id
+      if (!productId) return
       await addItem(productId, 1, variant)
       toast({
         title: 'Added to Cart',
@@ -321,6 +320,7 @@ export default function Store() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                   {products.map((product) => {
                     const productId = product._id || product.id
+                    if (!productId) return null
                     return (
                     <Link key={productId} to={`/product/${productId}`}>
                       <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">

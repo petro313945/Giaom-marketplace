@@ -48,7 +48,6 @@ export default function VariantSelectionModal({
 }: VariantSelectionModalProps) {
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [selectedColor, setSelectedColor] = useState<string>('')
-  const [availableVariants, setAvailableVariants] = useState<ProductVariant[]>([])
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [deliveryDates, setDeliveryDates] = useState(getDeliveryDates())
 
@@ -98,7 +97,6 @@ export default function VariantSelectionModal({
   // Filter available variants based on selected size and color
   useEffect(() => {
     if (!product?.variants) {
-      setAvailableVariants([])
       setSelectedVariant(null)
       return
     }
@@ -114,8 +112,6 @@ export default function VariantSelectionModal({
     if (selectedSize) {
       filtered = filtered.filter(v => v.size === selectedSize)
     }
-
-    setAvailableVariants(filtered)
 
     // Auto-select first available variant
     // If sizes exist, wait for size selection

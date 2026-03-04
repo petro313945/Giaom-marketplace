@@ -90,7 +90,6 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files) {
-      const newImages: ImageItem[] = []
       Array.from(files).forEach((file) => {
         // Validate file type
         if (!file.type.startsWith('image/')) {
@@ -232,14 +231,6 @@ export default function AddProductForm({ onProductAdded }: AddProductFormProps) 
     )
   }
 
-  // Toggle color selection
-  const toggleColor = (color: string) => {
-    setSelectedColors(prev => 
-      prev.includes(color) 
-        ? prev.filter(c => c !== color)
-        : [...prev, color]
-    )
-  }
 
   // Add a new color to color images
   const addColorForImages = (colorName: string) => {

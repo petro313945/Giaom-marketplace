@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
-import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, BarChart3, PieChart, Wallet, Download, CheckCircle2, User, Star, StoreIcon, Eye, RotateCcw } from 'lucide-react'
+import { Package, ShoppingBag, TrendingUp, DollarSign, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, BarChart3, PieChart, Wallet, Download, CheckCircle2, User, Star, StoreIcon, Eye } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '@/components/ui/use-toast'
 import {
@@ -34,7 +34,6 @@ import * as productService from '../../services/productService'
 import * as orderService from '../../services/orderService'
 import * as analyticsService from '../../services/analyticsService'
 import * as payoutService from '../../services/payoutService'
-import * as userService from '../../services/userService'
 import * as reviewService from '../../services/reviewService'
 import * as marketplaceSettingsService from '../../services/marketplaceSettingsService'
 import type { Product } from '../../services/productService'
@@ -67,7 +66,7 @@ import {
 } from 'recharts'
 
 export default function SellerProfile() {
-  const { user, updateUser } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1672,7 +1671,7 @@ export default function SellerProfile() {
                             />
                             <YAxis tickFormatter={(value) => `$${value.toFixed(0)}`} />
                             <Tooltip
-                              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Revenue']}
+                              formatter={(value: number | undefined) => value !== undefined ? [`$${value.toFixed(2)}`, 'Revenue'] : ['', 'Revenue']}
                               labelFormatter={(label) => {
                                 const date = new Date(label)
                                 return date.toLocaleDateString()
@@ -1720,7 +1719,7 @@ export default function SellerProfile() {
                               />
                               <YAxis />
                               <Tooltip
-                                formatter={(value: number) => [value, 'Orders']}
+                                formatter={(value: number | undefined) => value !== undefined ? [value, 'Orders'] : [0, 'Orders']}
                                 labelFormatter={(label) => {
                                   const date = new Date(label)
                                   return date.toLocaleDateString()
@@ -1761,7 +1760,7 @@ export default function SellerProfile() {
                                 cy="50%"
                                 labelLine={false}
                                 label={({ name, percent }) =>
-                                  `${name}: ${(percent * 100).toFixed(0)}%`
+                                  `${name}: ${percent !== undefined ? (percent * 100).toFixed(0) : 0}%`
                                 }
                                 outerRadius={80}
                                 fill="#8884d8"
@@ -1769,7 +1768,7 @@ export default function SellerProfile() {
                               >
                                 {Object.entries(analytics.ordersByStatus)
                                   .filter(([_, value]) => value > 0)
-                                  .map(([status], index) => {
+                                  .map(([,], index) => {
                                     const colors = [
                                       'hsl(var(--primary))',
                                       'hsl(var(--secondary))',
@@ -2818,7 +2817,7 @@ export default function SellerProfile() {
                         const sellerItems = order.items?.filter((item: any) => {
                           const product = typeof item.productId === 'object' ? item.productId : null
                           const productData = product as any
-                          return productData?.sellerId && productData.sellerId.toString() === user?._id
+                          return productData?.sellerId && productData.sellerId.toString() === user?.id
                         }) || []
                         
                         const sellerRevenue = sellerItems.reduce((sum: number, item: any) => {

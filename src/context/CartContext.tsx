@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as cartService from '../services/cartService';
 import * as productService from '../services/productService';
-import type { Cart, CartItem } from '../services/cartService';
+import type { Cart } from '../services/cartService';
 
 interface CartContextType {
   cart: Cart | null;
@@ -169,7 +169,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
           guestCart.items.push({
             id: `guest-item-${Date.now()}-${Math.random()}`,
             productId: {
-              id: product.id,
+              id: product.id || product._id || '',
               title: product.title,
               price: product.price,
               imageUrl: product.imageUrl || product.imageUrls?.[0],

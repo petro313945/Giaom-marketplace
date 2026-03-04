@@ -18,13 +18,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../../utils/orderStatusUtils'
 import { Package, Heart, MapPin, User, ChevronLeft, ChevronRight, Plus, Edit, Trash2, Star, ShoppingCart, ShoppingBag, DollarSign, TrendingUp, BarChart3, RotateCcw, StoreIcon } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -32,7 +25,7 @@ import * as orderService from '../../services/orderService'
 import * as userService from '../../services/userService'
 import * as addressService from '../../services/addressService'
 import * as wishlistService from '../../services/wishlistService'
-import { getImageUrl, getFirstImageUrl } from '../../utils/imageUtils'
+import { getFirstImageUrl } from '../../utils/imageUtils'
 import { Link } from 'react-router-dom'
 import type { Order } from '../../services/orderService'
 import type { Address, CreateAddressData } from '../../services/addressService'
@@ -988,6 +981,7 @@ export default function CustomerProfile({ defaultTab }: CustomerProfileProps = {
                               variant="destructive"
                               size="sm"
                               onClick={async () => {
+                                if (!productId) return
                                 try {
                                   await wishlistService.removeFromWishlist(productId)
                                   toast({

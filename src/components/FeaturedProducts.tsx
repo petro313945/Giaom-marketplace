@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardFooter } from './ui/card'
 import { Button } from './ui/button'
-import { Star } from 'lucide-react'
 import { useCart } from '../context/CartContext'
-import { useAuth } from '../context/AuthContext'
 import { useToast } from './ui/use-toast'
 import * as homeSettingsService from '../services/homeSettingsService'
 import { getFirstImageUrl } from '../utils/imageUtils'
@@ -18,9 +16,7 @@ export default function FeaturedProducts() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const { addItem } = useCart()
-  const { isAuthenticated } = useAuth()
   const { toast } = useToast()
-  const navigate = useNavigate()
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -63,6 +59,7 @@ export default function FeaturedProducts() {
     
     try {
       const productId = product._id || product.id
+      if (!productId) return
       await addItem(productId, 1)
       toast({
         title: 'Added to Cart',
@@ -84,6 +81,7 @@ export default function FeaturedProducts() {
 
     try {
       const productId = selectedProduct._id || selectedProduct.id
+      if (!productId) return
       await addItem(productId, 1, variant)
       toast({
         title: 'Added to Cart',
@@ -123,6 +121,7 @@ export default function FeaturedProducts() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {products.map((product) => {
           const productId = product._id || product.id
+          if (!productId) return null
           return (
           <Link key={productId} to={`/product/${productId}`}>
             <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
@@ -135,7 +134,7 @@ export default function FeaturedProducts() {
               </CardContent>
               <CardFooter className="flex flex-col items-start gap-2 p-4">
                 <h4 className="font-semibold text-lg line-clamp-2" title={product.title}>{product.title}</h4>
-                <ProductRating productId={productId} size="sm" showCount />
+                {productId && <ProductRating productId={productId} size="sm" showCount />}
                 <div className="flex items-center justify-between w-full">
                   <span className="text-xl font-bold">${product.price}</span>
                   <Button 

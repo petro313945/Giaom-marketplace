@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dialog'
 import * as orderService from '../services/orderService'
 import * as marketplaceSettingsService from '../services/marketplaceSettingsService'
-import { getImageUrl, getFirstImageUrl } from '../utils/imageUtils'
+import { getFirstImageUrl } from '../utils/imageUtils'
 import { getOrderStatusColor, ORDER_STATUS_CLASS } from '../utils/orderStatusUtils'
 import type { Order, RefundRequest } from '../services/orderService'
 
@@ -245,7 +245,7 @@ export default function OrderDetail() {
     const sellerItems = order.items.filter((item: any) => {
       const product = item.productId as any
       const productData = typeof product === 'object' ? product : null
-      return productData?.sellerId && productData.sellerId.toString() === user?._id
+      return productData?.sellerId && productData.sellerId.toString() === (user?.id || (user as any)?._id)
     })
 
     if (sellerItems.length === 0) return null

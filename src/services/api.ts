@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 
 // Use network IP if accessing from network, otherwise localhost
 const getApiUrl = () => {

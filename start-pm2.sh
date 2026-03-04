@@ -28,7 +28,7 @@ pm2 delete giaom-client 2>/dev/null || true
 
 # Start client with PM2
 echo "▶️  Starting client..."
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 # Save PM2 configuration
 pm2 save

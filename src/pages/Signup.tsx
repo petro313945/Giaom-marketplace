@@ -17,7 +17,7 @@ export default function Signup() {
     try {
       setError('')
       setLoading(true)
-      const response = await registerUser(data)
+      await registerUser(data)
       
       // Show success message
       toast({
