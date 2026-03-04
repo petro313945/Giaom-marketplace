@@ -8,10 +8,13 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "start": "serve -s dist -l 3000",
-    "pm2:start": "npx pm2 start ecosystem.config.cjs --only giaom-client",
-    "pm2:stop": "npx pm2 stop giaom-client",
-    "pm2:restart": "npx pm2 restart giaom-client",
-    "pm2:delete": "npx pm2 delete giaom-client",
+    "pm2:start": "pm2 start ecosystem.config.cjs --only giaom-client",
+    "pm2:stop": "pm2 stop giaom-client",
+    "pm2:restart": "pm2 restart giaom-client",
+    "pm2:delete": "pm2 delete giaom-client",
+    "pm2:logs": "pm2 logs giaom-client",
+    "pm2:status": "pm2 status giaom-client",
+    "pm2:build-and-start": "npm run build && pm2 start ecosystem.config.cjs --only giaom-client",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {

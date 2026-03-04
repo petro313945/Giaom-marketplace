@@ -1,9 +1,10 @@
+const path = require('path');
+
 module.exports = {
   apps: [
     {
       name: 'giaom-client',
-      script: 'npm',
-      args: 'run start',
+      script: path.join(__dirname, 'start-server.js'),
       instances: 1,
       exec_mode: 'fork',
       watch: false,
